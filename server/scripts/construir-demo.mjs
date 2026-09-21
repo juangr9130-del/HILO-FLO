@@ -80,8 +80,10 @@ for (const ruta of FUENTES) {
 
 const estilos = await readFile(join(WEB, 'estilos.css'), 'utf8');
 const plantilla = await readFile(join(WEB, 'demo', 'plantilla.html'), 'utf8');
-const pantallaCatalogo = await readFile(join(WEB, 'comun', 'pantalla-catalogo.js'), 'utf8');
-const interfaz = [pantallaCatalogo, await readFile(join(WEB, 'demo', 'interfaz.js'), 'utf8')].join('\n\n');
+const comun = await Promise.all(
+  ['pantalla-analisis.js', 'pantalla-catalogo.js'].map((f) => readFile(join(WEB, 'comun', f), 'utf8')),
+);
+const interfaz = [...comun, await readFile(join(WEB, 'demo', 'interfaz.js'), 'utf8')].join('\n\n');
 
 // La interfaz entra al MISMO ambito que el motor, asi que tambien se revisa.
 // Aqui choco una vez avisoSinReceta (dominio) contra avisoSinReceta (pintado)

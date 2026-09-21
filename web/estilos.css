@@ -278,6 +278,24 @@ input[type='file'] { font: inherit; font-size: 13px; max-width: 260px; }
 /* ---------- Tablas ---------- */
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+/* Encabezado de dos renglones: un grupo (Orders, Tons...) sobre sus dos
+   columnas de antes y después. */
+th.grupo { text-align: center; border-bottom: 1px solid #d6dde5; }
+th.sub { font-weight: 400; font-size: 12px; color: var(--texto-tenue); }
+th[rowspan] { vertical-align: bottom; }
+
+/* El valor que cambió respecto al programa actual. */
+td.cambio { color: var(--azul-claro); font-weight: 600; }
+
+/* Totales: separados del cuerpo, para que se lean como cierre y no como
+   una línea más. */
+tr.totales td {
+  border-top: 2px solid var(--azul);
+  background: #eef1f4;
+  font-weight: 600;
+  color: var(--azul);
+}
 th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--borde); }
 th { background: #eef1f4; color: var(--azul); font-size: 13px; position: sticky; top: 0; }
 th:first-child, td:first-child { text-align: left; }
@@ -285,6 +303,16 @@ td.num { font-family: 'Barlow Condensed', sans-serif; font-size: 15px; }
 td.vacia { color: #c8ced6; }
 td.mejor { background: #f2f9f5; color: var(--verde); font-weight: 600; }
 .scroll { max-height: 70vh; overflow: auto; }
+
+p.nota-tabla {
+  margin: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--borde);
+  font-size: 13px;
+  color: var(--texto-tenue);
+  line-height: 1.5;
+}
+p.nota-tabla b { color: var(--texto); }
 
 /* ---------- Avisos ---------- */
 
