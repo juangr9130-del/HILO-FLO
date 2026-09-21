@@ -6,10 +6,10 @@ formato, esto es lo que hay que ajustar.
 ## WI de parámetros de proceso
 
 - **Hoja:** `Anlagen - Setup ` (con el espacio al final; también se acepta sin
-  él). Se puede forzar otra con `--hoja-parametros`.
+  él). 
 - **Columna A:** diámetro de alambre estirado, numérico, entre 4 y 30 mm.
 - **Columnas C a P:** velocidad en mm/s. El mapa columna → línea está en
-  `src/hiloflo/parametros.py::COLUMNAS`.
+  `server/src/ingesta/parametros.js` (constante `COLUMNAS`).
 - Celda vacía o no numérica = esa línea no corre ese diámetro.
 - Los encabezados repetidos de cada bloque se ignoran solos, porque su
   columna A no es numérica.
@@ -19,7 +19,7 @@ formato, esto es lo que hay que ajustar.
 
 ## Production schedule
 
-- **Hoja:** `Sheet1` (o la primera). Se puede forzar con `--hoja-schedule`.
+- **Hoja:** `Sheet1` (o la primera). 
 - **Encabezados en la fila 2**, con estos nombres exactos (no distingue
   mayúsculas):
 
@@ -36,19 +36,14 @@ formato, esto es lo que hay que ajustar.
 - Renglones sin work center, sin descripción o sin cantidad se ignoran: así
   se saltan los subtotales y el gran total.
 
-## Catálogo de líneas (opcional)
+## Catálogo de líneas
 
-CSV con estas columnas:
+Ya no es un CSV: vive en `cat_linea` (las 14 líneas ITW más la 15
+desactivada) y `flo_parametro_linea` (horas, eficiencia y minutos de
+cambio de cada una). Los crea `sql/00_catalogos_flo.sql` y
+`sql/01_flo.sql`.
 
-```csv
-linea,horas_disponibles,eficiencia,minutos_cambio,activa
-ITW-1,144,0.88,45,si
-ITW-15,144,0.85,45,no
-```
+`cat_linea.activo = 0` deja la línea visible en el tablero pero impide que
+el algoritmo le mande carga. Así está ITW-15, que sigue por instalarse.
 
-- `eficiencia` acepta fracción (`0.88`) o porcentaje (`88`).
-- `activa` en `no` deja la línea en el reporte pero impide que el optimizador
-  le mande carga. Así está ITW-15 por omisión.
-
-Sin este archivo se usan los supuestos de `src/hiloflo/catalogo.py`, que
-están documentados en [`SUPUESTOS.md`](SUPUESTOS.md).
+Los supuestos por omisión están documentados en [`SUPUESTOS.md`](SUPUESTOS.md).

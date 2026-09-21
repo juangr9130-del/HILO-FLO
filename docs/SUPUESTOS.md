@@ -11,9 +11,9 @@ aritmética. Hoy se corre con:
 
 | parámetro | valor supuesto | dónde se cambia |
 |---|---|---|
-| horas disponibles por línea | 144 h (6 días × 24 h) | `--horas` |
-| eficiencia operativa | **desactivada (100 %)** | `--eficiencia` |
-| minutos por cambio de medida | 45 min | `--minutos-cambio` |
+| horas disponibles por línea | 144 h (6 días × 24 h) | `FLO_HORAS` / `flo_parametro_linea` |
+| eficiencia operativa | **desactivada (100 %)** | `FLO_EFICIENCIA` |
+| minutos por cambio de medida | 45 min | `FLO_MINUTOS_CAMBIO` |
 
 La eficiencia está **apagada a propósito**: por ahora el análisis se hace
 contra la velocidad de receta tal cual. Cuando haya un OEE medido se prende.
@@ -27,12 +27,12 @@ afinarlo.
 - ¿Cuánto tarda de verdad un cambio de medida? ¿Depende del salto de
   diámetro o del cambio de bobina de calentamiento?
 
-Con `--catalogo lineas.csv` se pueden dar valores distintos por línea:
+Para dar valores distintos por línea se captura en `flo_parametro_linea`:
 
-```csv
-linea,horas_disponibles,eficiencia,minutos_cambio,activa
-ITW-1,144,0.88,45,si
-ITW-2,120,0.82,60,si
+```sql
+UPDATE flo_parametro_linea
+   SET horas_disponibles = 120, minutos_cambio = 60
+ WHERE linea_id = (SELECT linea_id FROM cat_linea WHERE codigo = 'ITW-2');
 ```
 
 ## 2. Densidad del acero

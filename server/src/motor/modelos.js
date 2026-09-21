@@ -1,0 +1,190 @@
+/**
+ * Modelo de dominio de HILO-FLO (Mubea Florence, lineas ITW).
+ *
+ * Vocabulario de planta:
+ *   ITW      Induction Tempered Wire: las lineas de temple por induccion.
+ *   Linea    ITW-1 .. ITW-14 (la 15 esta por instalarse). En SAP son los
+ *            work centers BB001 .. BB014.
+ *   Orden    un renglon del production schedule: N kg de un alambre de cierto
+ *            diametro, ya asignado a un work center.
+ *   Programa el conjunto de ordenes del horizonte que se esta programando.
+ */
+
+/** Devanador que corre la linea cuando el schedule no indica otra cosa.
+ *  El WI solo tabula el DEM para ITW-2, y su nota dice que el schedule lo
+ *  marca en la seccion de notas; sin esa marca, corre el Neturen. */
+export const WINDER_PREDETERMINADO = 'NETUREN';
+
+/** BB001 -> ITW-1. Si no reconoce el patron, regresa el texto tal cual. */
+export function workCenterALinea(workCenter) {
+  const m = /^\s*BB0*(\d+)\s*$/i.exec(String(workCenter ?? ''));
+  return m ? `ITW-${Number(m[1])}` : String(workCenter ?? '').trim();
+}
+
+/** ITW-1 -> BB001. */
+export function lineaAWorkCenter(linea) {
+  const m = /^\s*ITW[-\s]?(\d+)\s*$/i.exec(String(linea ?? ''));
+  return m ? `BB${String(Number(m[1])).padStart(3, '0')}` : String(linea ?? '').trim();
+}
+
+/** Ordena ITW-2 antes que ITW-10 (numerico, no alfabetico). */
+export function ordenNatural(linea) {
+  const m = /(\d+)/.exec(linea ?? '');
+  return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+export function compararLineas(a, b) {
+  return ordenNatural(a) - ordenNatural(b) || String(a).localeCompare(String(b));
+}
+
+/** Una linea de temple por induccion. */
+export class Linea {
+  constructor({
+    clave,
+    horasDisponibles = 0,
+    eficiencia = 1,
+    minutosCambio = 0,
+    activa = true,
+  }) {
+    if (!(eficiencia > 0 && eficiencia <= 1)) {
+      throw new Error(`${clave}: eficiencia debe estar en (0, 1]`);
+    }
+    if (horasDisponibles < 0) {
+      throw new Error(`${clave}: horasDisponibles no puede ser negativa`);
+    }
+    this.clave = clave;
+    this.horasDisponibles = horasDisponibles;
+    this.eficiencia = eficiencia;
+    this.minutosCambio = minutosCambio;
+    this.activa = activa;
+    Object.freeze(this);
+  }
+
+  get workCenter() {
+    return lineaAWorkCenter(this.clave);
+  }
+}
+
+/**
+ * Una celda de la tabla ITW Line Speed del WI-FLO-CSW-P-526.
+ *
+ * `winder`, `grado` y `slm` son los discriminantes que trae el documento:
+ * ITW-2 se tabula por devanador (Neturen / DEM) y por grado (9254 vs 1065);
+ * ITW-10 se tabula por SLM / NON SLM. `null` significa "aplica a cualquiera".
+ */
+export class PuntoVelocidad {
+  constructor({ linea, diametroMm, mmS, winder = null, grado = null, slm = null }) {
+    if (!(mmS > 0)) throw new Error(`${linea}@${diametroMm}: mmS debe ser > 0`);
+    if (!(diametroMm > 0)) throw new Error(`${linea}: diametroMm debe ser > 0`);
+    this.linea = linea;
+    this.diametroMm = diametroMm;
+    this.mmS = mmS;
+    this.winder = winder;
+    this.grado = grado;
+    this.slm = slm;
+    Object.freeze(this);
+  }
+
+  /** True si esta receta es usable para la orden. */
+  aplicaA(orden) {
+    if (this.winder !== null) {
+      // Sin devanador indicado en el schedule solo aplica la receta del
+      // devanador de planta; tomar la del DEM inflaria el rendimiento.
+      const esperado = orden.winder ?? WINDER_PREDETERMINADO;
+      if (this.winder !== esperado) return false;
+    }
+    if (this.grado !== null && this.grado !== orden.grupoGrado) return false;
+    if (this.slm !== null && this.slm !== orden.slm) return false;
+    return true;
+  }
+
+  /** Cuantos discriminantes fija. Gana la receta mas especifica. */
+  get especificidad() {
+    return [this.winder, this.grado, this.slm].filter((x) => x !== null).length;
+  }
+}
+
+/** Un renglon del production schedule. */
+export class Orden {
+  constructor({
+    id,
+    diametroMm,
+    kilogramos,
+    linea,
+    material = '',
+    descripcion = '',
+    grupoGrado = '9254',
+    slm = false,
+    winder = null,
+    secuencia = 0,
+    notas = '',
+    clientePo = '',
+    fijo = false,
+  }) {
+    if (!(kilogramos > 0)) throw new Error(`orden ${id}: kilogramos debe ser > 0`);
+    if (!(diametroMm > 0)) throw new Error(`orden ${id}: diametroMm debe ser > 0`);
+    this.id = id;
+    this.diametroMm = diametroMm;
+    this.kilogramos = kilogramos;
+    this.linea = linea;
+    this.material = material;
+    this.descripcion = descripcion;
+    this.grupoGrado = grupoGrado;
+    this.slm = slm;
+    this.winder = winder;
+    this.secuencia = secuencia;
+    this.notas = notas;
+    this.clientePo = clientePo;
+    this.fijo = fijo;
+    Object.freeze(this);
+  }
+
+  /** Etiqueta legible del diametro, para agrupar y reportar. */
+  get medida() {
+    return this.diametroMm.toFixed(2);
+  }
+
+  /** Lo unico de la orden que cambia la receta y el rendimiento. */
+  get firma() {
+    return `${this.diametroMm}|${this.grupoGrado}|${this.slm}|${this.winder}`;
+  }
+
+  moverA(linea, secuencia = null) {
+    return new Orden({
+      ...this,
+      linea,
+      secuencia: secuencia === null ? this.secuencia : secuencia,
+    });
+  }
+}
+
+/** El production schedule del horizonte. */
+export class Programa {
+  constructor(ordenes = [], horizonte = '') {
+    this.ordenes = ordenes;
+    this.horizonte = horizonte;
+  }
+
+  get length() {
+    return this.ordenes.length;
+  }
+
+  get kilogramos() {
+    return this.ordenes.reduce((t, o) => t + o.kilogramos, 0);
+  }
+
+  /** Ordenes de una linea, en la secuencia en que estan programadas. */
+  deLinea(linea) {
+    return this.ordenes
+      .filter((o) => o.linea === linea)
+      .sort((a, b) => a.secuencia - b.secuencia || String(a.id).localeCompare(String(b.id)));
+  }
+
+  lineasUsadas() {
+    return [...new Set(this.ordenes.map((o) => o.linea))].sort(compararLineas);
+  }
+
+  reemplazar(ordenes) {
+    return new Programa([...ordenes], this.horizonte);
+  }
+}
