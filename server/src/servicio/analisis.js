@@ -8,6 +8,7 @@ import { TablaVelocidades } from '../motor/rendimiento.js';
 import { evaluarPrograma } from '../motor/programa.js';
 import { buscarOportunidades } from '../motor/optimizador.js';
 import { reunirAvisos } from './avisos.js';
+import { ErrorDeDatos } from '../errores.js';
 import { redondear } from '../util/numeros.js';
 
 /** Las 14 lineas instaladas mas ITW-15, que esta por instalarse. */
@@ -68,7 +69,7 @@ export function analizar(programa, puntos, supuestos = {}) {
   );
   if (desconocidas.length) {
     throw new ErrorDeDatos(
-      `el schedule trae work centers que no corresponden a ninguna linea ITW: ${desconocidas.join(', ')}`,
+      `the schedule has work centers that map to no ITW line: ${desconocidas.join(', ')}`,
     );
   }
 
@@ -80,8 +81,7 @@ export function analizar(programa, puntos, supuestos = {}) {
   return { programa, lineas, tabla, evaluacion, propuesta };
 }
 
-/** Error de datos del archivo, no del servidor: se responde 400, no 500. */
-export class ErrorDeDatos extends Error {}
+
 
 /**
  * Arma el JSON que pinta la pantalla.

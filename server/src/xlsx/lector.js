@@ -12,6 +12,8 @@
  * lado del servidor.
  */
 
+import { ErrorDeDatos } from '../errores.js';
+
 const FIRMA_EOCD = 0x06054b50;
 const FIRMA_CENTRAL = 0x02014b50;
 const FIRMA_LOCAL = 0x04034b50;
@@ -22,7 +24,7 @@ export async function abrirZip(buffer) {
   const vista = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
 
   const eocd = buscarEocd(vista, datos.length);
-  if (eocd === -1) throw new Error('el archivo no parece un .xlsx (no se encontro el fin del ZIP)');
+  if (eocd === -1) throw new ErrorDeDatos('this does not look like an .xlsx file (end of ZIP not found)');
 
   const entradas = vista.getUint16(eocd + 10, true);
   let cursor = vista.getUint32(eocd + 16, true);
@@ -39,7 +41,7 @@ export async function abrirZip(buffer) {
     const nombre = new TextDecoder().decode(datos.subarray(cursor + 46, cursor + 46 + largoNombre));
 
     if (comprimido === 0xffffffff || offsetLocal === 0xffffffff) {
-      throw new Error('el .xlsx usa ZIP64, que este lector no soporta');
+      throw new ErrorDeDatos('this .xlsx uses ZIP64, which this reader does not support');
     }
     archivos.set(nombre, { metodo, comprimido, offsetLocal });
     cursor += 46 + largoNombre + largoExtra + largoComentario;
@@ -119,11 +121,11 @@ export async function leerHoja(buffer, nombreHoja = null) {
   const elegida = nombreHoja
     ? hojas.find((h) => h.nombre === nombreHoja || h.nombre.trim() === nombreHoja.trim())
     : hojas[0];
-  if (!elegida) throw new Error(`el archivo no tiene la hoja "${nombreHoja}"`);
+  if (!elegida) throw new ErrorDeDatos(`the file has no sheet named "${nombreHoja}"`);
 
   const compartidas = leerCompartidas(zip, parsear);
   const xml = zip.get(`xl/${elegida.ruta}`);
-  if (!xml) throw new Error(`no se encontro la hoja ${elegida.nombre} dentro del archivo`);
+  if (!xml) throw new ErrorDeDatos(`sheet ${elegida.nombre} was not found inside the file`);
 
   const doc = parsear(decodificar(xml));
   const filas = new Map();

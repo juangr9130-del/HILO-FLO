@@ -55,11 +55,12 @@ export function avisoDevanador(programa, lineas, tabla, evaluacion) {
     cierreAsumido: redondear(evaluacion.makespan, 2),
     cierreSiAlterno: redondear(evAlterno.makespan, 2),
     horasDeMas: redondear(evAlterno.horasRequeridas - evaluacion.horasRequeridas, 2),
+    // Los mensajes van en ingles: los lee el programador de Florence.
     mensaje:
-      `${sinAnotar.length} órdenes no traen anotado el devanador en las notas del schedule. ` +
-      `Se calcularon con ${WINDER_PREDETERMINADO}, que es el deber ser. ` +
-      `Si en realidad corrieron con ${WINDER_ALTERNO}, el programa no cierra en ` +
-      `${redondear(evaluacion.makespan, 1)} h sino en ${redondear(evAlterno.makespan, 1)} h.`,
+      `${sinAnotar.length} orders don't have the winder noted in the schedule. ` +
+      `They were calculated with the ${WINDER_PREDETERMINADO} winder, which is the standard. ` +
+      `If they actually ran on the ${WINDER_ALTERNO} winder, the program doesn't finish in ` +
+      `${redondear(evaluacion.makespan, 1)} h but in ${redondear(evAlterno.makespan, 1)} h.`,
   };
 }
 
@@ -79,8 +80,8 @@ export function avisoSinReceta(evaluacion) {
       kilogramos: o.kilogramos,
     })),
     mensaje:
-      `${sinReceta.length} órdenes están en una línea que no tiene receta para ese diámetro. ` +
-      'No se les puede calcular tiempo ni rendimiento, así que quedan fuera de todos los totales.',
+      `${sinReceta.length} orders are on a line that has no line speed for that diameter. ` +
+      'Their time and throughput cannot be calculated, so they are left out of every total.',
   };
 }
 

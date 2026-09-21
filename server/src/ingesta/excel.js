@@ -5,6 +5,7 @@
 
 import ExcelJS from 'exceljs';
 import { valorCelda } from './comun.js';
+import { ErrorDeDatos } from '../errores.js';
 
 /** Carga una hoja y la entrega en la forma de ingesta/hoja.js. */
 export async function cargarConExcelJs(rutaOBuffer, { hoja = null, preferida = null } = {}) {
@@ -29,7 +30,7 @@ export async function cargarConExcelJs(rutaOBuffer, { hoja = null, preferida = n
 function elegirHoja(wb, hoja, preferida) {
   if (hoja) {
     const elegida = wb.getWorksheet(hoja);
-    if (!elegida) throw new Error(`el archivo no tiene la hoja "${hoja}"`);
+    if (!elegida) throw new ErrorDeDatos(`the file has no sheet named "${hoja}"`);
     return elegida;
   }
   if (preferida) {
@@ -39,6 +40,6 @@ function elegirHoja(wb, hoja, preferida) {
     const encontrada = wb.worksheets.find((w) => w.name.trim().toLowerCase() === objetivo);
     if (encontrada) return encontrada;
   }
-  if (!wb.worksheets.length) throw new Error('el archivo no tiene ninguna hoja legible');
+  if (!wb.worksheets.length) throw new ErrorDeDatos('the file has no readable sheet');
   return wb.worksheets[0];
 }

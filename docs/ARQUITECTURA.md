@@ -14,6 +14,7 @@ qué se aparta**; la fuente de verdad de las decisiones de plataforma es
 | Prefijo de tabla | `flo_` para lo propio, `cat_` para lo compartido. Ninguna tabla `cat_` se duplica ni se cachea localmente. |
 | Sesión | Cookie `httpOnly` con JWT firmado con el `JWT_SECRET` compartido. El módulo lo verifica localmente, sin consultar a nadie. |
 | Acceso | `cat_rol` + `rol_modulo_acceso` con el módulo `'FLO'`. **Defensa en el propio backend**, no sólo en el ruteo: `exigirAcceso` rechaza por rol aunque alguien llegue a la URL por su cuenta. |
+| Idioma de la UI | **Inglés**, a diferencia de los módulos de CSW. Florence está en Kentucky. El código y la documentación siguen en español. |
 | UI | `#1B3A66` azul de header y marca; `#CC5500` **sólo** en botón de acción primaria y tab activo. Estatus verde `#2F8F5B`, azul `#2A6DB0`, ámbar `#C98A12`, rojo `#C23B2E`, gris `#6B7785`. `Barlow Condensed` para títulos y números, `Public Sans` para cuerpo. |
 | Tarjeta KPI | **Bloque sólido**, nunca tarjeta blanca con acento. Azul marino cuando la métrica es neutra (órdenes a mover); semántico cuando tiene dimensión de bien/mal (rojo el cierre de hoy, verde el reajustado). |
 
@@ -74,7 +75,24 @@ En el módulo demo el mismo catálogo vive dentro del HTML y los ajustes se
 guardan en el navegador, pero el modelo es idéntico: semilla fija más
 ajustes encima.
 
-### 4. El módulo arranca sin base de datos
+### 4. La interfaz va en inglés, el código en español
+
+Los módulos de CSW tienen la interfaz en español porque los usa personal de
+la planta de México. FLO la tiene en inglés porque la usa el programador de
+Florence, Kentucky.
+
+Eso alcanza a todo lo que el usuario lee, y algunas de esas cadenas nacen
+lejos de la pantalla: el texto del consejo lo arma `optimizador.js`, los
+avisos `avisos.js`, y los errores de archivo mal formado los lanzan los
+lectores. Todos están en inglés, con un comentario que dice por qué.
+
+Una consecuencia concreta: el ruteo de errores **no puede depender del texto
+del mensaje**. Antes la API decidía si responder 400 o 500 con una expresión
+regular sobre el mensaje en español; al traducir, un archivo malo empezó a
+responder 500. Ahora se distingue por tipo (`ErrorDeDatos`), que no depende
+del idioma.
+
+### 5. El módulo arranca sin base de datos
 
 Sin `DB_SERVER`, FLO levanta con un repositorio en memoria (`modo demo`).
 Sirve para revisar la pantalla con los Excel reales sin montar SQL Server.

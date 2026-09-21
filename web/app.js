@@ -7,7 +7,7 @@
 
 const $ = (id) => document.getElementById(id);
 const num = (v, d = 0) =>
-  (v ?? 0).toLocaleString('es-MX', { minimumFractionDigits: d, maximumFractionDigits: d });
+  (v ?? 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 let paquete = null;
 let vista = 'actual';
@@ -21,7 +21,7 @@ async function arrancar() {
   try {
     const estado = await (await fetch('/api/estado')).json();
     $('usuario').textContent = estado.usuario?.demo
-      ? 'modo demo'
+      ? 'demo mode'
       : (estado.usuario?.nombre ?? estado.usuario?.numeroEmpleado ?? '');
     await catalogo.refrescar();
     await pintarEstadoRecetas();
@@ -29,7 +29,7 @@ async function arrancar() {
     actualizarTabs();
     abrirPanel('carga');
   } catch (e) {
-    mostrarError(`No se pudo contactar al módulo: ${e.message}`);
+    mostrarError(`Could not reach the module: ${e.message}`);
   }
 }
 
@@ -43,9 +43,9 @@ async function pintarEstadoRecetas() {
   const lineas = new Set(v.grupos.map((g) => g.linea)).size;
   const puntos = v.grupos.reduce((t, g) => t + g.puntos.length, 0);
   $('estado-recetas').textContent =
-    `${num(puntos)} recetas del ${v.documento}, ${lineas} líneas. Ya vienen dentro del módulo` +
+    `${num(puntos)} line speeds from ${v.documento}, ${lineas} lines. Already built into the module` +
     (v.resumen.total
-      ? `, con ${v.resumen.total} ${v.resumen.total === 1 ? 'valor ajustado' : 'valores ajustados'}.`
+      ? `, with ${v.resumen.total} ${v.resumen.total === 1 ? 'value adjusted' : 'values adjusted'}.`
       : '.');
 }
 
@@ -55,9 +55,9 @@ const catalogo = montarCatalogo({
   datos: () => fetch('/api/velocidades').then((r) => r.json()),
   revisar: (clave, mmS) => {
     const v = Number(mmS);
-    if (!Number.isFinite(v)) return 'la velocidad tiene que ser un número';
-    if (v <= 0) return 'la velocidad tiene que ser mayor que cero';
-    if (v > 2000) return 'esa velocidad está fuera de rango (máximo 2000 mm/s)';
+    if (!Number.isFinite(v)) return 'the speed has to be a number';
+    if (v <= 0) return 'the speed has to be greater than zero';
+    if (v > 2000) return 'that speed is out of range (2000 mm/s max)';
     return null;
   },
   guardar: (clave, mmS) =>
@@ -89,9 +89,9 @@ async function pintarHistorial() {
   const lista = await (await fetch('/api/programas')).json();
   if (!lista.length) return ($('historial').innerHTML = '');
   $('historial').innerHTML = `
-    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Programas anteriores</h3>
+    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Previous programs</h3>
     <table>
-      <tr><th>Folio</th><th>Archivo</th><th>Órdenes</th><th>Toneladas</th><th>Oportunidad</th></tr>
+      <tr><th>Ticket</th><th>File</th><th>Orders</th><th>Tons</th><th>Opportunity</th></tr>
       ${lista
         .map(
           (p) => `<tr>
@@ -126,7 +126,7 @@ $('analizar').addEventListener('click', async () => {
   const archivo = $('archivo-schedule').files[0];
   if (!archivo) return;
   $('analizar').disabled = true;
-  $('progreso').textContent = 'Analizando… esto tarda unos segundos.';
+  $('progreso').textContent = 'Analyzing… this takes a few seconds.';
   ocultarError();
 
   const datos = new FormData();
@@ -162,13 +162,13 @@ function pintarKpis() {
   const gana = a.toneladasIncremento > 0.05;
 
   const bloques = [
-    kpi('Cierra hoy en', num(a.makespanActual, 1), 'h', `lo que tarda ${a.cuelloDeBotella}`, 'malo'),
-    kpi('Con el reajuste', num(a.makespanPropuesto, 1), 'h',
-        `${num(a.makespanActual - a.makespanPropuesto, 1)} h antes`, gana ? 'bueno' : ''),
-    kpi('Se puede producir', `+${num(a.toneladasIncremento, 1)}`, 't',
-        `sobre las ${num(a.toneladasActuales, 1)} t del programa`, gana ? 'bueno' : ''),
-    kpi('Hay que mover', num(a.ordenesMovidas), `de ${num(paquete.ordenes)}`,
-        `${a.movimientos.length} movimientos`, ''),
+    kpi('Finishes today in', num(a.makespanActual, 1), 'h', `how long ${a.cuelloDeBotella} takes`, 'malo'),
+    kpi('Rebalanced', num(a.makespanPropuesto, 1), 'h',
+        `${num(a.makespanActual - a.makespanPropuesto, 1)} h earlier`, gana ? 'bueno' : ''),
+    kpi('Extra output', `+${num(a.toneladasIncremento, 1)}`, 't',
+        `on top of the program's ${num(a.toneladasActuales, 1)} t`, gana ? 'bueno' : ''),
+    kpi('Orders to move', num(a.ordenesMovidas), `of ${num(paquete.ordenes)}`,
+        `${a.movimientos.length} moves`, ''),
   ];
   $('kpis-programacion').innerHTML = bloques.join('');
   $('kpis-analisis').innerHTML = bloques.join('');
@@ -181,9 +181,9 @@ function pintarKpis() {
 function pintarAvisos(avisos) {
   const desactualizado = programaDesactualizado
     ? `<div class="aviso nota">
-         <strong>Cambiaste velocidades después de analizar el folio ${paquete.folio}.</strong>
-         Lo que ves se calculó con las anteriores. Vuelve a subir el schedule para
-         que el análisis use las nuevas.
+         <strong>You changed line speeds after analyzing ticket ${paquete.folio}.</strong>
+         What you see was calculated with the old ones. Upload the schedule again so
+         the analysis uses the new speeds.
        </div>`
     : '';
   $('avisos').innerHTML =
@@ -198,13 +198,13 @@ function pintarAvisos(avisos) {
 function pintarAvisoDevanador(av) {
   const recorre = av.cierreSiAlterno - av.cierreAsumido;
   return `<div class="aviso nota">
-    <strong>${av.ordenes} órdenes (${num(av.kilogramos)} kg) no traen anotado el devanador en las notas del schedule.</strong>
-    Se calcularon con <b>${av.asumido}</b>, que es el deber ser.
-    Si en realidad corrieron con ${av.alterno}, el programa no cierra en
-    <b>${num(av.cierreAsumido, 1)} h</b> sino en <b>${num(av.cierreSiAlterno, 1)} h</b>
-    ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h más</b>` : ''}.
+    <strong>${av.ordenes} orders (${num(av.kilogramos)} kg) have no winder noted in the schedule.</strong>
+    They were calculated with the <b>${av.asumido}</b> winder, which is the standard.
+    If they actually ran on the ${av.alterno} winder, the program does not finish in
+    <b>${num(av.cierreAsumido, 1)} h</b> but in <b>${num(av.cierreSiAlterno, 1)} h</b>
+    ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h more</b>` : ''}.
     <div style="margin-top:5px;color:var(--texto-tenue)">
-      ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} órdenes, ${num(l.kilogramos)} kg`).join(' · ')}
+      ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} orders, ${num(l.kilogramos)} kg`).join(' · ')}
     </div>
   </div>`;
 }
@@ -212,9 +212,9 @@ function pintarAvisoDevanador(av) {
 function pintarAvisoSinReceta(av) {
   const d = av.detalle;
   return `<div class="aviso error">
-    <strong>${av.ordenes} órdenes (${num(av.kilogramos)} kg) están en una línea que no tiene receta para ese diámetro.</strong>
-    Quedan fuera de todos los totales:
-    ${d.slice(0, 6).map((o) => `${o.orden} (${num(o.diametroMm, 2)} mm en ${o.linea})`).join(', ')}${d.length > 6 ? `, y ${d.length - 6} más` : ''}.
+    <strong>${av.ordenes} orders (${num(av.kilogramos)} kg) are on a line with no speed for that diameter.</strong>
+    They are left out of every total:
+    ${d.slice(0, 6).map((o) => `${o.orden} (${num(o.diametroMm, 2)} mm on ${o.linea})`).join(', ')}${d.length > 6 ? `, and ${d.length - 6} more` : ''}.
   </div>`;
 }
 
@@ -229,8 +229,8 @@ function kpi(etiqueta, valor, unidad, pie, clase) {
 function pintarTablero() {
   const propuesta = vista === 'propuesto';
   $('leyenda-tablero').textContent = propuesta
-    ? 'cómo quedaría cada línea después de mover las órdenes'
-    : 'cómo está programada cada línea hoy';
+    ? 'how each line would look after moving the orders'
+    : 'how each line is scheduled today';
 
   const tope = Math.max(...paquete.lineas.map((l) => Math.max(l.actual.horas, l.propuesto.horas)), 1);
 
@@ -249,7 +249,7 @@ function pintarTablero() {
       return `<div class="linea ${l.activa ? '' : 'inactiva'}">
         <div class="rotulo">
           <div class="clave">${l.linea}</div>
-          <div class="wc">${l.workCenter}${l.activa ? '' : ' · por instalar'}</div>
+          <div class="wc">${l.workCenter}${l.activa ? '' : ' · not installed yet'}</div>
         </div>
         <div class="contenido">
           <div class="barra ${esCuello ? 'cuello' : ''} ${propuesta ? 'propuesta' : ''}">
@@ -257,9 +257,9 @@ function pintarTablero() {
             <i class="cambio" style="width:${(d.horasCambio / tope) * 100}%"></i>
           </div>
           <div class="horas">
-            <b>${num(d.horas, 1)} h</b> · ${num(d.kg)} kg · ${d.ordenes} órdenes
-            ${d.cambios ? ` · ${d.cambios} cambios de medida` : ''}
-            ${esCuello ? ' · <span style="color:var(--rojo);font-weight:600">cuello de botella</span>' : ''}
+            <b>${num(d.horas, 1)} h</b> · ${num(d.kg)} kg · ${d.ordenes} orders
+            ${d.cambios ? ` · ${d.cambios} size changes` : ''}
+            ${esCuello ? ' · <span style="color:var(--rojo);font-weight:600">bottleneck</span>' : ''}
             ${propuesta && Math.abs(delta) > 0.05
               ? ` · <span class="${delta < 0 ? 'baja' : 'sube'}">${delta < 0 ? '−' : '+'}${num(Math.abs(delta), 1)} h</span>`
               : ''}
@@ -282,7 +282,7 @@ function rollo(c, clave, propuesta) {
     marca = ` <span class="destino">→ ${c.lineaPropuesta}</span>`;
   }
   if (c.sinReceta) clase = 'sin-receta';
-  const t = c.sinReceta ? 'sin receta' : `${num(c.horas, 1)} h`;
+  const t = c.sinReceta ? 'no speed' : `${num(c.horas, 1)} h`;
   return `<span class="rollo ${clase}" title="${c.orden} · ${c.descripcion ?? ''}">
     <span class="d">${num(c.diametroMm, 2)}</span> · ${num(c.kilogramos)} kg · ${t}${marca}
   </span>`;
@@ -292,19 +292,19 @@ function pintarConsejos() {
   const a = paquete.analisis;
   if (!a.movimientos.length) {
     $('consejos').innerHTML =
-      '<div class="vacio">El programa ya está balanceado con las recetas disponibles. No hay nada que mover.</div>';
+      '<div class="vacio">The program is already balanced with the available line speeds. Nothing to move.</div>';
     return;
   }
 
   const encabezado = `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">
-      Hoy el programa cierra en <b>${num(a.makespanActual, 1)} h</b>, que es lo que tarda
-      <b>${a.cuelloDeBotella}</b>; las demás líneas acaban antes y esperan.
-      Con estos ${a.movimientos.length} movimientos cierra en <b>${num(a.makespanPropuesto, 1)} h</b>,
-      y en el mismo calendario caben <b>${num(a.factorProduccion, 2)}×</b> las toneladas de hoy:
+      Today the program finishes in <b>${num(a.makespanActual, 1)} h</b>, which is how long
+      <b>${a.cuelloDeBotella}</b> takes; the other lines finish earlier and sit idle.
+      With these ${a.movimientos.length} moves it finishes in <b>${num(a.makespanPropuesto, 1)} h</b>,
+      and the same calendar fits <b>${num(a.factorProduccion, 2)}×</b> today's tonnage:
       <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b>.
       <div style="color:var(--texto-tenue);margin-top:6px">
-        Ese incremento supone que haya carga con qué llenar las horas que se liberan.
-        Si no la hay, la ganancia es cerrar el programa antes.
+        That increase assumes there is work to fill the hours it frees up.
+        If there isn't, the gain is finishing the program earlier.
       </div>
     </div>`;
 
@@ -316,19 +316,19 @@ function pintarConsejos() {
           <span class="indice">${m.id}</span>
           <span class="detalle">
             <div class="mover">
-              Pasa <b>${m.ordenes} ${m.ordenes === 1 ? 'orden' : 'órdenes'} de ${num(m.diametroMm, 2)} mm</b>
-              de <b>${m.origen}</b><span class="flecha">→</span><b>${m.destino}</b>
+              Move <b>${m.ordenes} ${m.ordenes === 1 ? 'order' : 'orders'} of ${num(m.diametroMm, 2)} mm</b>
+              from <b>${m.origen}</b><span class="flecha">→</span><b>${m.destino}</b>
             </div>
             <div class="meta">
               ${num(m.kilogramos)} kg ·
-              ${num(m.horasOrigen, 1)} h en ${m.origen} contra ${num(m.horasDestino, 1)} h en ${m.destino}
+              ${num(m.horasOrigen, 1)} h on ${m.origen} vs ${num(m.horasDestino, 1)} h on ${m.destino}
             </div>
-            <div class="folios">Órdenes SAP: ${m.folios.join(', ')}</div>
+            <div class="folios">SAP orders: ${m.folios.join(', ')}</div>
           </span>
           <span class="ganancia">${m.horasLiberadas >= 0 ? '−' : '+'}${num(Math.abs(m.horasLiberadas), 1)} h</span>
           <span class="acciones">
-            <button class="secundario" data-accion="si">Lo hago</button>
-            <button class="secundario" data-accion="no">No aplica</button>
+            <button class="secundario" data-accion="si">Will do</button>
+            <button class="secundario" data-accion="no">Not applicable</button>
           </span>
         </div>`,
       )
@@ -352,8 +352,8 @@ function pintarTablaLineas() {
   const filas = paquete.lineas.filter((l) => l.activa || l.actual.ordenes);
   $('tabla-lineas').innerHTML = `
     <tr>
-      <th>Línea</th><th>Órdenes</th><th>Toneladas</th>
-      <th>Horas hoy</th><th>Horas reajustado</th><th>Cambio</th><th>Utilización</th>
+      <th>Line</th><th>Orders</th><th>Tons</th>
+      <th>Hours today</th><th>Hours rebalanced</th><th>Change</th><th>Utilization</th>
     </tr>
     ${filas
       .map((l) => {
@@ -377,7 +377,7 @@ async function cargarRendimiento() {
   if (!r.ok) return;
   const { lineas, filas } = await r.json();
   $('tabla-rendimiento').innerHTML = `
-    <tr><th>Ø mm</th>${lineas.map((l) => `<th>${l}</th>`).join('')}<th>Más rápida</th></tr>
+    <tr><th>Ø mm</th>${lineas.map((l) => `<th>${l}</th>`).join('')}<th>Fastest</th></tr>
     ${filas
       .map(
         (f) => `<tr>
@@ -404,7 +404,7 @@ function empatadas(fila, lineas) {
   const iguales = lineas.filter(
     (l) => fila.celdas[l] !== null && Math.abs(fila.celdas[l] - fila.mejorKgH) < 0.05,
   );
-  return iguales.length <= 3 ? iguales.join(', ') : `${iguales.length} líneas`;
+  return iguales.length <= 3 ? iguales.join(', ') : `${iguales.length} lines`;
 }
 
 // ---------------------------------------------------------------------------

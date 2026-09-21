@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HILO-FLO — Programación ITW (demo)</title>
+<title>HILO-FLO — ITW Scheduling (demo)</title>
 
 <!--
   MÓDULO DEMO DE HILO-FLO — Mubea Florence
@@ -40,54 +40,54 @@
 
 <header>
   <h1>HILO-FLO</h1>
-  <span class="planta">Florence · Líneas ITW</span>
+  <span class="planta">Florence · ITW Lines</span>
   <span class="relleno"></span>
   <span class="folio" id="folio" hidden></span>
   <span class="usuario">demo</span>
 </header>
 
 <div class="banner-demo">
-  <b>Versión de prueba.</b>
-  Todo corre dentro de tu navegador — los archivos no salen de esta máquina.
-  Los folios se guardan aquí mismo y se pierden si limpias el navegador.
+  <b>Trial version.</b>
+  Everything runs inside your browser — no file leaves this machine.
+  Tickets are saved here and are lost if you clear the browser.
 </div>
 
 <nav class="tabs" id="tabs">
-  <button data-panel="carga" aria-selected="true">Cargar programa</button>
-  <button data-panel="programacion" aria-selected="false" data-requiere-programa>Programación</button>
-  <button data-panel="analisis" aria-selected="false" data-requiere-programa>Análisis</button>
-  <button data-panel="rendimiento" aria-selected="false" data-requiere-programa>Rendimiento kg/h</button>
-  <button data-panel="velocidades" aria-selected="false">Velocidades</button>
+  <button data-panel="carga" aria-selected="true">Load program</button>
+  <button data-panel="programacion" aria-selected="false" data-requiere-programa>Schedule</button>
+  <button data-panel="analisis" aria-selected="false" data-requiere-programa>Analysis</button>
+  <button data-panel="rendimiento" aria-selected="false" data-requiere-programa>Throughput kg/h</button>
+  <button data-panel="velocidades" aria-selected="false">Line speeds</button>
 </nav>
 
 <main>
   <div class="aviso error" id="error" hidden></div>
 
   <div class="carga" id="carga" data-panel="carga">
-    <h2>Cargar programa de producción</h2>
-    <p>El módulo lee los dos archivos tal como salen hoy de planta; no hay que
-       reformatearlos.</p>
+    <h2>Load production program</h2>
+    <p>The app reads the schedule exactly as it comes out of SAP today —
+       nothing to reformat.</p>
 
     <div class="paso listo" id="paso-recetas">
       <span class="indice">1</span>
       <span class="texto">
-        <strong>Velocidades de receta</strong>
+        <strong>Line speeds</strong>
         <span id="estado-recetas"></span>
       </span>
-      <button class="secundario" id="ir-velocidades">Ver y editar</button>
+      <button class="secundario" id="ir-velocidades">View and edit</button>
     </div>
 
     <div class="paso" id="paso-schedule">
       <span class="indice">2</span>
       <span class="texto">
         <strong>Production schedule</strong>
-        <span>El Excel de SAP de la semana. Cada carga recibe su propio folio.</span>
+        <span>This week's SAP spreadsheet. Every upload gets its own ticket number.</span>
       </span>
       <input type="file" id="archivo-schedule" accept=".xlsx,.xlsm">
     </div>
 
     <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
-      <button class="primario" id="analizar" disabled>Analizar programa</button>
+      <button class="primario" id="analizar" disabled>Analyze program</button>
       <span id="progreso" style="color:var(--texto-tenue)"></span>
     </div>
 
@@ -100,11 +100,11 @@
 
     <div class="tarjeta">
       <h2>
-        Corridas por línea
+        Runs by line
         <small id="leyenda-tablero"></small>
         <span style="float:right;font-weight:400">
-          <button class="secundario" id="ver-actual" aria-pressed="true">Programa actual</button>
-          <button class="secundario" id="ver-propuesto" aria-pressed="false">Con el reajuste</button>
+          <button class="secundario" id="ver-actual" aria-pressed="true">Current program</button>
+          <button class="secundario" id="ver-propuesto" aria-pressed="false">Rebalanced</button>
         </span>
       </h2>
       <div id="tablero"></div>
@@ -115,12 +115,12 @@
     <div class="kpis" id="kpis-analisis"></div>
 
     <div class="tarjeta">
-      <h2>Qué conviene hacer <small>consejos ordenados por impacto</small></h2>
+      <h2>What to do <small>ranked by impact</small></h2>
       <div id="consejos"></div>
     </div>
 
     <div class="tarjeta">
-      <h2>Carga por línea <small>horas requeridas, antes y después del reajuste</small></h2>
+      <h2>Load by line <small>hours required, before and after rebalancing</small></h2>
       <div class="cuerpo" style="padding:0">
         <div class="scroll"><table id="tabla-lineas"></table></div>
       </div>
@@ -129,19 +129,19 @@
 
   <section id="panel-velocidades" hidden>
     <div class="aviso info">
-      Estas son las velocidades de receta del <b id="doc-catalogo"></b>, ya cargadas
-      dentro del programa. Cambia la velocidad de cualquier diámetro y el
-      <b>rendimiento en kg/h se recalcula solo</b> — no se captura por separado,
-      sale de la velocidad y de la geometría del alambre.
-      Lo que edites queda marcado, y puedes regresar al valor del documento cuando quieras.
+      These are the line speeds from <b id="doc-catalogo"></b>, already built into
+      the app. Change the speed for any diameter and the
+      <b>throughput in kg/h recalculates itself</b> — it is never entered separately,
+      it comes from the speed and the wire geometry.
+      Anything you edit stays flagged, and you can reset it to the document value at any time.
     </div>
 
     <div class="tarjeta">
       <h2>
-        Velocidades por línea
+        Line speeds by line
         <small id="resumen-ajustes"></small>
         <span style="float:right;font-weight:400">
-          <button class="secundario" id="restablecer-todo" hidden>Regresar todo al documento</button>
+          <button class="secundario" id="restablecer-todo" hidden>Reset all to document</button>
         </span>
       </h2>
       <div class="cuerpo" style="padding-bottom:10px">
@@ -156,13 +156,13 @@
 
   <section id="panel-rendimiento" hidden>
     <div class="aviso info">
-      El rendimiento sale de la velocidad de receta y la geometría del alambre:
-      <strong>kg/h = mm/s × 3.6 × (π/4 · d²) × 7 850 kg/m³</strong>.
-      Celda vacía = esa línea no tiene receta para ese diámetro, o sea que no lo corre.
-      En verde, las líneas más rápidas de cada diámetro.
+      Throughput comes from the line speed and the wire geometry:
+      <strong>kg/h = mm/s × 3.6 × (π/4 · d²) × 7,850 kg/m³</strong>.
+      An empty cell means that line has no speed for that diameter, so it does not run it.
+      The fastest lines for each diameter are in green.
     </div>
     <div class="tarjeta">
-      <h2>Rendimiento kg/h por diámetro y línea</h2>
+      <h2>Throughput kg/h by diameter and line</h2>
       <div class="cuerpo" style="padding:0">
         <div class="scroll"><table id="tabla-rendimiento"></table></div>
       </div>

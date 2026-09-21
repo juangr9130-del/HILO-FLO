@@ -108,12 +108,12 @@ test('pedir una hoja que no existe falla claro', async (t) => {
   const dir = await carpeta(t);
   const sch = await crearSchedule(join(dir, 's.xlsx'), RENGLONES);
   const bytes = await readFile(sch);
-  await assert.rejects(() => leerHoja(bytes, 'No existe'), /no tiene la hoja/);
+  await assert.rejects(() => leerHoja(bytes, 'No existe'), /no sheet named/);
 });
 
 test('un archivo que no es .xlsx falla claro', async () => {
   await assert.rejects(
     () => leerHoja(new TextEncoder().encode('esto no es un zip').buffer),
-    /no parece un \.xlsx/,
+    /does not look like an \.xlsx/,
   );
 });

@@ -73,18 +73,19 @@ export class MovimientoAgrupado {
     return this.ordenes.map((o) => o.id);
   }
 
+  /** El texto va en ingles: lo lee el programador de Florence. */
   describir() {
     const n = this.ordenes.length;
-    const plural = n === 1 ? 'orden' : 'ordenes';
+    const plural = n === 1 ? 'order' : 'orders';
     const h = this.horasLiberadas;
     let efecto;
-    if (h >= 0.05) efecto = `ahorra ${h.toFixed(1)} h de corrida`;
+    if (h >= 0.05) efecto = `saves ${h.toFixed(1)} h of run time`;
     else if (h <= -0.05)
-      efecto = `cuesta ${Math.abs(h).toFixed(1)} h de corrida, pero destraba ${this.origen}`;
-    else efecto = 'mismo tiempo de corrida, reparte carga';
+      efecto = `costs ${Math.abs(h).toFixed(1)} h of run time, but unblocks ${this.origen}`;
+    else efecto = 'same run time, spreads the load';
     return (
-      `${this.origen} -> ${this.destino}: ${n} ${plural} de ` +
-      `${this.diametroMm.toFixed(2)} mm (${Math.round(this.kilogramos).toLocaleString('es-MX')} kg). ${efecto}`
+      `${this.origen} -> ${this.destino}: ${n} ${plural} of ` +
+      `${this.diametroMm.toFixed(2)} mm (${Math.round(this.kilogramos).toLocaleString('en-US')} kg). ${efecto}`
     );
   }
 }

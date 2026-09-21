@@ -8,6 +8,19 @@ base `Plant_Platform`, catálogos `cat_*`, sesión por cookie con JWT
 compartido y el estándar visual de la plataforma. Ver
 [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md).
 
+## Idioma
+
+**La interfaz está en inglés**: la usa el programador de Florence, Kentucky.
+Eso incluye todo lo que el usuario lee — pantallas, consejos, avisos y los
+mensajes de error de la API.
+
+El código, sus comentarios y esta documentación están en español, igual que
+el resto de la plataforma: son para el equipo que la mantiene.
+
+Los términos siguen los del propio documento de proceso y de SAP, para que
+el operador los reconozca: *line speed* (mm/s), *throughput* (kg/h),
+*work center*, *order*, *winder*, *size change*, *bottleneck*.
+
 ## Qué hace
 
 El programador sube el production schedule de SAP tal como sale hoy, y la

@@ -47,11 +47,11 @@ export function sesion(req, _res, siguiente) {
 /** Exige sesion valida y rol con acceso al modulo FLO. */
 export function exigirAcceso(req, res, siguiente) {
   if (!req.usuario) {
-    return res.status(401).json({ error: 'Sesion requerida.' });
+    return res.status(401).json({ error: 'Sign-in required.' });
   }
   if (!req.usuario.demo && !config.rolesPermitidos.includes(req.usuario.rol)) {
     return res.status(403).json({
-      error: `El rol "${req.usuario.rol}" no tiene acceso a HILO-FLO.`,
+      error: `Role "${req.usuario.rol}" does not have access to HILO-FLO.`,
     });
   }
   siguiente();
@@ -62,7 +62,7 @@ export function exigirEscritura(req, res, siguiente) {
   const permitidos = ['programador', 'produccion', 'administrador'];
   if (!req.usuario?.demo && !permitidos.includes(req.usuario?.rol)) {
     return res.status(403).json({
-      error: 'Solo el programador puede cargar programas o recetas.',
+      error: 'Only the scheduler can upload programs or change line speeds.',
     });
   }
   siguiente();

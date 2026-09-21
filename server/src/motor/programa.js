@@ -8,6 +8,7 @@
  */
 
 import { compararLineas } from './modelos.js';
+import { ErrorDeDatos } from '../errores.js';
 
 /** Como le fue a una orden en la linea donde esta programada. */
 export class Corrida {
@@ -154,8 +155,8 @@ export function evaluarPrograma(programa, lineas, tabla) {
   const porClave = new Map(lineas.map((l) => [l.clave, l]));
   const desconocidas = programa.lineasUsadas().filter((l) => !porClave.has(l));
   if (desconocidas.length) {
-    throw new Error(
-      `el schedule usa lineas que no estan en el catalogo: ${desconocidas.join(', ')}`,
+    throw new ErrorDeDatos(
+      `the schedule uses lines that are not in the catalog: ${desconocidas.join(', ')}`,
     );
   }
 

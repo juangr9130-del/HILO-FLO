@@ -92,7 +92,8 @@ test('la eficiencia se aplica al kg/h de la pantalla', () => {
 });
 
 test('las variantes se nombran como las lee el programador', () => {
-  assert.equal(nombreVariante({ winder: 'DEM', grado: '1065', slm: null }), 'devanador DEM · grado 1065');
+  // En ingles: es lo que se pinta en la pantalla de Line Speeds.
+  assert.equal(nombreVariante({ winder: 'DEM', grado: '1065', slm: null }), 'DEM winder · grade 1065');
   assert.equal(nombreVariante({ winder: null, grado: null, slm: true }), 'SLM');
   assert.equal(nombreVariante({ winder: null, grado: null, slm: false }), 'NON SLM');
   assert.equal(nombreVariante({ winder: null, grado: null, slm: null }), '');
@@ -108,11 +109,11 @@ test('ITW-2 tiene tres variantes e ITW-10 dos', () => {
 test('revisarAjuste rechaza lo que no tiene sentido', () => {
   const clave = semilla()[0].clave;
   assert.equal(revisarAjuste(clave, 300), null);
-  assert.match(revisarAjuste('no-existe', 300), /no existe/);
-  assert.match(revisarAjuste(clave, 0), /mayor que cero/);
-  assert.match(revisarAjuste(clave, -5), /mayor que cero/);
-  assert.match(revisarAjuste(clave, 'abc'), /numero/);
-  assert.match(revisarAjuste(clave, 5000), /fuera de rango/);
+  assert.match(revisarAjuste('no-existe', 300), /not in the catalog/);
+  assert.match(revisarAjuste(clave, 0), /greater than zero/);
+  assert.match(revisarAjuste(clave, -5), /greater than zero/);
+  assert.match(revisarAjuste(clave, 'abc'), /has to be a number/);
+  assert.match(revisarAjuste(clave, 5000), /out of range/);
 });
 
 test('clavePunto distingue las variantes de la misma linea y diametro', () => {

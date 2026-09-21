@@ -60,7 +60,7 @@ test('agrupa las ordenes que se mueven juntas', () => {
   assert.equal(grupos.length, 1);
   assert.ok(grupos[0].ordenes.length >= 2);
   assert.deepEqual([grupos[0].origen, grupos[0].destino], ['ITW-1', 'ITW-7']);
-  assert.match(grupos[0].describir(), new RegExp(`${grupos[0].ordenes.length} ordenes`));
+  assert.match(grupos[0].describir(), new RegExp(`${grupos[0].ordenes.length} orders`));
 });
 
 test('balancea en vez de vaciar la linea lenta', () => {

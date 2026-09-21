@@ -30,6 +30,7 @@
 
 import { DIAMETRO_MAX, DIAMETRO_MIN, PuntoVelocidad } from '../motor/modelos.js';
 import { celda, numerosDeFila } from './hoja.js';
+import { ErrorDeDatos } from '../errores.js';
 import { redondear } from '../util/numeros.js';
 
 export const HOJA_WI = 'Anlagen - Setup ';
@@ -82,8 +83,8 @@ export function interpretarVelocidades({ filas }) {
   }
 
   if (!puntos.length) {
-    throw new Error(
-      'no se encontro ninguna velocidad en el WI; revisa que la hoja sea la del ITW Line Speed',
+    throw new ErrorDeDatos(
+      'no line speeds were found in the WI; check that the sheet is the ITW Line Speed one',
     );
   }
   return puntos;

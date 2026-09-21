@@ -33,7 +33,7 @@ function kgHoraDeVelocidad(mmS, diametroMm, eficiencia = 1) {
 function montarCatalogo(api) {
   const $ = (id) => document.getElementById(id);
   const num = (v, d = 0) =>
-    (v ?? 0).toLocaleString('es-MX', { minimumFractionDigits: d, maximumFractionDigits: d });
+    (v ?? 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 
   let vista = null; // lo ultimo que devolvio datos()
   let lineaElegida = null;
@@ -50,8 +50,8 @@ function montarCatalogo(api) {
 
     const r = vista.resumen;
     $('resumen-ajustes').textContent = r.total
-      ? `${r.total} ${r.total === 1 ? 'valor ajustado' : 'valores ajustados'} respecto al documento`
-      : 'sin cambios respecto al documento';
+      ? `${r.total} ${r.total === 1 ? 'value differs' : 'values differ'} from the document`
+      : 'matches the document';
     $('restablecer-todo').hidden = r.total === 0;
 
     const ajustadasPorLinea = new Map(r.lineas.map((l) => [l.linea, l.puntos]));
@@ -106,9 +106,9 @@ function montarCatalogo(api) {
     $('tabla-velocidades').innerHTML = `
       <tr>
         <th>Ø mm</th>
-        <th style="width:120px">Velocidad mm/s</th>
-        <th style="width:130px">Rendimiento kg/h</th>
-        <th style="width:200px">Documento</th>
+        <th style="width:120px">Line speed mm/s</th>
+        <th style="width:130px">Throughput kg/h</th>
+        <th style="width:200px">Document</th>
       </tr>
       ${grupo.puntos.map((p) => renglon(p)).join('')}`;
 
@@ -133,7 +133,7 @@ function montarCatalogo(api) {
 
   function documento(p) {
     return p.ajustado
-      ? `${num(p.mmSOriginal)} mm/s · <button class="deshacer" data-clave="${p.clave}">regresar</button>`
+      ? `${num(p.mmSOriginal)} mm/s · <button class="deshacer" data-clave="${p.clave}">reset</button>`
       : '—';
   }
 
@@ -190,15 +190,15 @@ function montarCatalogo(api) {
     const { resumen } = await api.datos();
     vista.resumen = resumen;
     $('resumen-ajustes').textContent = resumen.total
-      ? `${resumen.total} ${resumen.total === 1 ? 'valor ajustado' : 'valores ajustados'} respecto al documento`
-      : 'sin cambios respecto al documento';
+      ? `${resumen.total} ${resumen.total === 1 ? 'value differs' : 'values differ'} from the document`
+      : 'matches the document';
     $('restablecer-todo').hidden = resumen.total === 0;
   }
 
   $('restablecer-todo').addEventListener('click', async () => {
     const n = vista?.resumen.total ?? 0;
     if (!n) return;
-    if (!confirm(`¿Regresar los ${n} valores ajustados a los del documento?`)) return;
+    if (!confirm(`Reset all ${n} adjusted values back to the document?`)) return;
     await api.restablecer();
     api.alCambiar?.();
     await refrescar();

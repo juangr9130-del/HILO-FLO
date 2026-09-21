@@ -20,6 +20,7 @@ const WEB = join(RAIZ, '..', 'web');
 
 /** En orden de dependencia. Ninguno de estos toca exceljs, mssql ni express. */
 const FUENTES = [
+  'src/errores.js',
   'src/util/numeros.js',
   'src/motor/modelos.js',
   'src/motor/rendimiento.js',

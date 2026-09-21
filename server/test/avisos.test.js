@@ -45,7 +45,7 @@ test('el aviso cuantifica lo que costaria haber corrido con el otro', () => {
   // 600 mm/s asumido contra 275 real: el cierre se recorre bastante.
   assert.ok(a.cierreSiAlterno > a.cierreAsumido, 'el alterno debe ser mas lento');
   assert.ok(a.horasDeMas > 0);
-  assert.match(a.mensaje, /deber ser/);
+  assert.match(a.mensaje, /standard/);
 });
 
 test('el aviso agrupa por linea', () => {

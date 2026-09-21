@@ -119,7 +119,7 @@ test('ignora numeros fuera del rango de diametro', async (t) => {
 
 test('falla si la hoja no trae velocidades', async (t) => {
   const wi = await crearWi(join(await carpeta(t), 'vacio.xlsx'), {});
-  await assert.rejects(() => leerVelocidades(wi), /no se encontro ninguna velocidad/);
+  await assert.rejects(() => leerVelocidades(wi), /no line speeds were found/);
 });
 
 // --- lectura del schedule -------------------------------------------------
@@ -167,5 +167,5 @@ test('la secuencia respeta el orden del archivo', async (t) => {
 
 test('falla si el archivo no trae ordenes', async (t) => {
   const sch = await crearSchedule(join(await carpeta(t), 'vacio.xlsx'), []);
-  await assert.rejects(() => leerPrograma(sch), /no se leyo ninguna orden/);
+  await assert.rejects(() => leerPrograma(sch), /no orders were read/);
 });

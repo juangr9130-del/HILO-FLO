@@ -112,11 +112,12 @@ export function catalogoParaPantalla(ajustes, { eficiencia = 1 } = {}) {
   return [...grupos.values()];
 }
 
-/** "Devanador DEM · grado 1065", o cadena vacia si la linea no se discrimina. */
+/** "DEM winder · grade 1065", o cadena vacia si la linea no se discrimina.
+ *  En ingles: se pinta en la pantalla de Line Speeds. */
 export function nombreVariante({ winder, grado, slm }) {
   const partes = [];
-  if (winder) partes.push(`devanador ${winder === 'DEM' ? 'DEM' : 'Neturen'}`);
-  if (grado) partes.push(`grado ${grado}`);
+  if (winder) partes.push(`${winder === 'DEM' ? 'DEM' : 'Neturen'} winder`);
+  if (grado) partes.push(`grade ${grado}`);
   if (slm !== null && slm !== undefined) partes.push(slm ? 'SLM' : 'NON SLM');
   return partes.join(' · ');
 }
@@ -137,12 +138,12 @@ export function resumenAjustes(ajustes) {
  * @returns {string|null} el motivo del rechazo, o null si es valido.
  */
 export function revisarAjuste(clave, mmS) {
-  if (!clavesValidas().has(clave)) return 'ese punto no existe en el catalogo';
+  if (!clavesValidas().has(clave)) return 'that point is not in the catalog';
   const valor = Number(mmS);
-  if (!Number.isFinite(valor)) return 'la velocidad tiene que ser un numero';
-  if (valor <= 0) return 'la velocidad tiene que ser mayor que cero';
+  if (!Number.isFinite(valor)) return 'the speed has to be a number';
+  if (valor <= 0) return 'the speed has to be greater than zero';
   // El WI va de 40 a 600 mm/s; un cero de mas suele ser un dedazo, no una receta.
-  if (valor > 2000) return 'esa velocidad esta fuera de rango (maximo 2000 mm/s)';
+  if (valor > 2000) return 'that speed is out of range (2000 mm/s max)';
   return null;
 }
 

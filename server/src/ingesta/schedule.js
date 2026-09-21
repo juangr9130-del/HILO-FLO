@@ -21,6 +21,7 @@
 import { DIAMETRO_MAX, DIAMETRO_MIN, Orden, Programa, workCenterALinea } from '../motor/modelos.js';
 import { numero, texto } from './comun.js';
 import { celda, numerosDeFila } from './hoja.js';
+import { ErrorDeDatos } from '../errores.js';
 
 export const HOJA_SCHEDULE = 'Sheet1';
 export const FILA_ENCABEZADOS = 2;
@@ -94,7 +95,7 @@ function mapearColumnas(filas) {
   }
   const faltantes = OBLIGATORIAS.filter((c) => !columnas.has(c));
   if (faltantes.length) {
-    throw new Error(`al schedule le faltan columnas obligatorias: ${faltantes.join(', ')}`);
+    throw new ErrorDeDatos(`the schedule is missing required columns: ${faltantes.join(', ')}`);
   }
   return columnas;
 }
@@ -150,7 +151,7 @@ export function interpretarPrograma({ filas }, horizonte = '') {
   }
 
   if (!ordenes.length) {
-    throw new Error('no se leyo ninguna orden del schedule; revisa la hoja y los encabezados');
+    throw new ErrorDeDatos('no orders were read from the schedule; check the sheet and the column headers');
   }
   return new Programa(ordenes, horizonte);
 }
