@@ -199,7 +199,24 @@ se le enseñó al programador ese día; borrarlo de verdad perdería el rastro d
 una decisión que quizá ya se tomó en piso.
 
 En el módulo demo sí se borra, porque ahí el historial vive en el navegador y
-no hay nada que auditar.
+no hay nada que auditar. Hay además un *Delete all* para vaciarlo de un
+golpe: un folio se repone volviendo a subir el schedule, que son segundos.
+
+### La huella de la forma del paquete
+
+El demo guarda los folios en `localStorage` y tiene que **tirar los que se
+guardaron con una forma vieja**: no traen los campos nuevos y la pantalla los
+pintaba en ceros («plant average 0 kg/h», como si la planta estuviera parada)
+o decía que una pestaña no existía.
+
+Eso era un número que se subía a mano, y **dos veces se olvidó subirlo**. Ya
+no: `npm run demo` calcula la huella SHA-256 de los archivos que *deciden* la
+forma del paquete (`src/motor/`, `src/servicio/`) y del que la *lee*
+(`web/comun/pantalla-analisis.js`), y la inyecta en el HTML. Cambiar
+cualquiera de ellos invalida lo guardado sin que nadie se tenga que acordar.
+
+Si alguien le pone un valor fijo a `VERSION_PAQUETE`, la construcción truena:
+sin el marcador la huella dejaría de aplicarse en silencio.
 
 ## Pendientes de despliegue
 

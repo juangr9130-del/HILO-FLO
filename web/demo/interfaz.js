@@ -12,13 +12,19 @@ const LLAVE = 'hiloflo.demo.v1';
 /**
  * Version de la forma del paquete que se guarda en el navegador.
  *
- * Se sube cada vez que el analisis agrega campos. Los folios guardados con
- * una version anterior no los traen, y al abrirlos la pantalla pintaba ceros
- * -- "plant average 0 kg/h" -- como si la planta estuviera parada. Ahora se
- * descartan al arrancar; los ajustes del catalogo no, que cuestan mas de
- * reponer que volver a subir un schedule.
+ * Los folios guardados con una version anterior no traen los campos nuevos,
+ * y al abrirlos la pantalla pintaba ceros -- "plant average 0 kg/h" -- como
+ * si la planta estuviera parada. Se descartan al arrancar; los ajustes del
+ * catalogo no, que cuestan mas de reponer que volver a subir un schedule.
+ *
+ * NO es un numero que se suba a mano. Lo era, y dos veces se olvido subirlo:
+ * la primera dejo folios pintando ceros, la segunda dejo folios sin hoja de
+ * corridas diciendo que la pestana no existia. Ahora lo calcula la
+ * construccion con la huella de los archivos que deciden la forma del
+ * paquete y del que lo lee, asi que cambiar cualquiera de ellos invalida lo
+ * guardado sin que nadie se tenga que acordar.
  */
-const VERSION_PAQUETE = 3;
+const VERSION_PAQUETE = '{VERSION}';
 
 let paquete = null;
 let estado = cargarEstado();

@@ -28,7 +28,11 @@ function montarHistorial(api) {
     }
 
     caja.innerHTML = `
-      <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Previous programs</h3>
+      <div class="barra">
+        <h3 style="font-size:15px;color:var(--azul);margin:0">Previous programs</h3>
+        <span class="relleno"></span>
+        <button class="borrar" data-borrar-todo>Delete all ${lista.length}</button>
+      </div>
       <table>
         <tr>
           <th>Ticket</th><th>File</th><th>Orders</th><th>Tons</th>
@@ -46,6 +50,8 @@ function montarHistorial(api) {
     for (const b of caja.querySelectorAll('button[data-borrar]')) {
       b.addEventListener('click', () => borrar(b.dataset.borrar));
     }
+    caja.querySelector('button[data-borrar-todo]')
+      ?.addEventListener('click', () => borrarTodos(lista));
   }
 
   function renglon(p) {
@@ -72,6 +78,17 @@ function montarHistorial(api) {
     if (!confirm(`Delete ticket ${folio}? This cannot be undone.`)) return;
     await api.borrar(folio);
     api.alBorrar?.(folio);
+    await refrescar();
+  }
+
+  /** Vaciar la lista de un golpe. Un folio se repone volviendo a subir el
+   *  schedule, asi que no vale la pena hacerlo folio por folio. */
+  async function borrarTodos(lista) {
+    if (!confirm(`Delete all ${lista.length} tickets? This cannot be undone.`)) return;
+    for (const p of lista) {
+      await api.borrar(p.folio);
+      api.alBorrar?.(p.folio);
+    }
     await refrescar();
   }
 

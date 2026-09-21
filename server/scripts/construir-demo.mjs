@@ -10,6 +10,7 @@
  *   npm run demo
  */
 
+import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -136,10 +137,39 @@ const motor = porArchivo
   .map(([ruta, codigo]) => `// ===== ${ruta} ${'='.repeat(Math.max(0, 62 - ruta.length))}\n\n${codigo}`)
   .join('\n\n');
 
+/**
+ * La huella de la forma del paquete.
+ *
+ * El demo guarda los folios en el navegador y tiene que tirar los que se
+ * guardaron con una forma vieja. Ese numero se subia a mano y dos veces se
+ * olvido: quedaron folios pintando ceros y folios sin hoja de corridas.
+ *
+ * Aqui sale solo. Se toman los archivos que DECIDEN la forma del paquete y
+ * los que la LEEN: si cambia cualquiera, la huella cambia y lo guardado se
+ * descarta. Cuesta un schedule que volver a subir, que son segundos; el bug
+ * contrario cuesta creerle a una pantalla en ceros.
+ */
+const huella = createHash('sha256');
+for (const [ruta, codigo] of porArchivo) {
+  if (/servicio|motor/.test(ruta)) huella.update(`${ruta}\n${codigo}\n`);
+}
+huella.update(comun[0]); // pantalla-analisis.js, la que lee el paquete
+const version = huella.digest('hex').slice(0, 12);
+
+// Si alguien le pone un valor a mano, la huella deja de aplicarse en
+// silencio y volvemos al bug que esto vino a matar.
+if (!interfaz.includes("'{VERSION}'")) {
+  throw new Error(
+    "la interfaz ya no trae el marcador '{VERSION}' en VERSION_PAQUETE.\n" +
+    'Sin el, el demo no descarta los folios guardados con una forma vieja.',
+  );
+}
+
 const html = plantilla
   .replace('/*{ESTILOS}*/', () => estilos)
   .replace('/*{MOTOR}*/', () => motor)
-  .replace('/*{INTERFAZ}*/', () => interfaz);
+  .replace('/*{INTERFAZ}*/', () => interfaz)
+  .replace("'{VERSION}'", () => JSON.stringify(version));
 
 const destino = join(WEB, 'hiloflo-demo.html');
 await writeFile(destino, html);
@@ -147,3 +177,4 @@ await writeFile(destino, html);
 const kb = (html.length / 1024).toFixed(0);
 console.log(`web/hiloflo-demo.html  ${kb} KB`);
 console.log(`  ${FUENTES.length} modulos, ${simbolos} simbolos, sin dependencias externas`);
+console.log(`  forma del paquete ${version}`);
