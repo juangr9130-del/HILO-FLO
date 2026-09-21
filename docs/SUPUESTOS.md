@@ -68,25 +68,70 @@ líneas no cambia nada.
 **Pregunta:** ¿hay forma de sacar el grado del número de material, o del
 maestro de materiales de SAP, en vez de adivinarlo de la descripción?
 
-## 5. Devanador DEM
+## 5. Por qué ITW-2 es el cuello de botella — lo que sí sabemos y lo que no
+
+Sobre el programa del 17/09, ITW-2 define el cierre de toda la planta:
+159.6 h de corrida contra un promedio de ~99 h. Vale la pena ser preciso
+sobre por qué, porque de aquí sale el número de toneladas.
+
+### No es que esté mal cargada
+
+Una primera lectura dijo que ITW-2 "carga 65 t al ritmo más lento de la
+planta" (390 kg/h contra 848 kg/h de las otras trece). **Esa lectura es
+engañosa y se corrigió.** Desglosando su carga contra el WI:
+
+| Ø mm | kg | kg/h ITW-2 | mejor alternativa | ¿ITW-2 es la mejor? |
+|---|---|---|---|---|
+| 5.72 – 9.53 | 44 430 | 200 – 554 | ITW-1 (182 – 504) | **sí, en los 7 diámetros** |
+| 11.20 – 12.40 | 20 700 | 508 – 640 | ITW-1 (696 – 853) | no |
+
+En **68 % de su tonelada, ITW-2 es la línea más rápida de la planta**. Su
+promedio de 390 kg/h no es un problema de asignación: es un efecto de
+mezcla. El alambre delgado da pocos kg/h **en cualquier línea**, porque la
+sección es chica — 5.72 mm da 200 kg/h en la mejor línea, 12.70 mm da 895.
+Concentrar el delgado en una sola línea la vuelve el cuello de botella sin
+importar cuál sea.
+
+Lo único genuinamente mal puesto son los 20.7 t de 11.20–12.40 mm, donde
+ITW-1 corre ~1.5× más rápido. Son 8.9 h de las 159.6.
+
+### El dato que sí llama la atención
+
+**Las 44.4 t de alambre ≤ 9.53 mm del programa completo están en ITW-2. Las
+20 órdenes. Ninguna otra línea tiene una sola.**
+
+Eso no parece casualidad: parece una regla que alguien sigue. Pero el WI sí
+tabula velocidad para esos diámetros en ITW-1, ITW-3, ITW-7, ITW-8, ITW-9 e
+ITW-10. O la regla responde a algo que el WI no captura (herramental,
+devanador, calidad), o es una costumbre heredada de que ITW-2 es la más
+rápida por hora en delgado.
+
+**Es la pregunta más cara del proyecto**, porque decide el número:
+
+| escenario | cierre | incremento |
+|---|---|---|
+| El delgado se puede repartir | 167.1 h → 98.2 h | **+760 t** |
+| El delgado se queda en ITW-2 | 167.1 h → 128.4 h | **+327 t** |
+| ITW-2 con devanador DEM | 132.1 h → 96.5 h | **+400 t** |
+| DEM y el delgado amarrado | 132.1 h → 97.1 h | **+391 t** |
+
+## 5b. Devanador DEM
 
 El WI dice que el schedule marca el uso del devanador DEM en la sección de
-notas. En el schedule del 17/09 **ninguna orden lo menciona**, así que todas
-las de ITW-2 se están calculando con la receta del devanador Neturen
-(275 mm/s), que es la más lenta de las tres.
+notas. En el schedule del 17/09 **ninguna orden lo menciona**, así que todo
+ITW-2 se calcula con la receta Neturen, la más lenta de las tres.
 
-Si en la práctica ITW-2 corre con DEM seguido, su rendimiento real es bastante
-mayor que el que estamos calculando.
+La diferencia no es pareja: pega justo donde ITW-2 carga su tonelada.
 
-**Es el supuesto que más mueve el resultado.** Sobre el programa del 17/09,
-ITW-2 es el cuello de botella de toda la planta: carga 65 t a 390 kg/h cuando
-el promedio de las otras 13 líneas es de 848 kg/h, y por eso el programa
-cierra en 167 h. Con devanador DEM ese cuello se reduce y el incremento de
-producción calculado baja de **+760 t a +400 t**.
+| Ø mm | Neturen | DEM | factor |
+|---|---|---|---|
+| 5.72 | 275 | 600 | **2.18×** |
+| 7.19 | 275 | 478 | **1.74×** |
+| 6.65 / 7.70 / 7.92 | 275 | 375 | 1.36× |
+| 9.40 en adelante | 275 → 170 | igual | 1.00× |
 
 **Pregunta:** ¿cómo se decide en el piso qué devanador usa ITW-2? ¿Queda
-registrado en algún lado? Y sobre todo: **¿por qué ITW-2 trae 65 t cargadas
-si es la línea más lenta para esos diámetros?**
+registrado en algún lado, o es algo que el operador escoge?
 
 ## 6. Diámetro: ¿estirado o terminado?
 
