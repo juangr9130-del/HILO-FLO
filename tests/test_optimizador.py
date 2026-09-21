@@ -75,7 +75,7 @@ def test_no_mueve_a_una_linea_sin_receta_para_el_diametro(tabla, lineas):
     assert propuesta.agrupadas() == []
 
 
-def test_agrupa_varias_ordenes_del_mismo_diametro(tabla, lineas):
+def test_agrupa_las_ordenes_que_se_mueven_juntas(tabla, lineas):
     programa = Programa(
         [
             Orden(f"A{n}", 14.70, 3000, "ITW-1", secuencia=n)
@@ -86,9 +86,44 @@ def test_agrupa_varias_ordenes_del_mismo_diametro(tabla, lineas):
     grupos = buscar_oportunidades(programa, lineas, tabla).agrupadas()
 
     assert len(grupos) == 1
-    assert len(grupos[0].ordenes) == 3
-    assert grupos[0].kilogramos == pytest.approx(9000)
-    assert "3 ordenes" in grupos[0].describir()
+    assert len(grupos[0].ordenes) >= 2
+    assert (grupos[0].origen, grupos[0].destino) == ("ITW-1", "ITW-7")
+    assert f"{len(grupos[0].ordenes)} ordenes" in grupos[0].describir()
+
+
+def test_balancea_en_vez_de_vaciar_la_linea_lenta(tabla, lineas):
+    """ITW-7 es el doble de rapida, pero mandarle las tres ordenes deja a
+    ITW-1 parada y el programa cierra mas tarde que repartiendolas."""
+    programa = Programa(
+        [
+            Orden(f"A{n}", 14.70, 3000, "ITW-1", secuencia=n)
+            for n in range(1, 4)
+        ]
+    )
+
+    propuesta = buscar_oportunidades(programa, lineas, tabla)
+    resultado = propuesta.evaluacion_propuesta.lineas
+
+    # Las dos lineas se quedan con carga: ninguna acaba vacia.
+    assert resultado["ITW-1"].horas_requeridas > 0
+    assert resultado["ITW-7"].horas_requeridas > 0
+    # Y el programa cierra antes que mandandolo todo a la mas rapida.
+    todo_a_itw7 = 9000 / tabla.kg_hora("ITW-7", programa.ordenes[0])
+    assert propuesta.makespan_propuesto < todo_a_itw7
+
+
+def test_el_reajuste_nunca_atrasa_el_cierre_del_programa(tabla, lineas):
+    programa = Programa(
+        [
+            Orden("A", 14.70, 9000, "ITW-1", secuencia=1),
+            Orden("B", 14.70, 3000, "ITW-1", secuencia=2),
+            Orden("C", 20.00, 4000, "ITW-13", secuencia=1),
+        ]
+    )
+
+    propuesta = buscar_oportunidades(programa, lineas, tabla)
+
+    assert propuesta.makespan_propuesto <= propuesta.makespan_original
 
 
 def test_el_neto_no_reporta_viajes_de_ida_y_vuelta(tabla, lineas):

@@ -122,15 +122,39 @@ Por cada línea, en la secuencia en que están programadas sus órdenes:
 ## Cómo se buscan las áreas de oportunidad
 
 Búsqueda local sobre el schedule que ya armó el programador. En cada vuelta
-se prueban dos jugadas y se toma la mejor:
+se prueban tres jugadas y se toma la mejor:
 
-- **MOVER**: pasar una orden a otra línea que tenga receta para ese diámetro.
+- **MOVER BLOQUE**: pasar de golpe todas las órdenes de un diámetro a otra
+  línea. Es la jugada que más rinde, porque el cambio de medida en la línea
+  destino se paga una sola vez y se reparte entre todo el bloque. Moviendo
+  orden por orden, la primera carga con el cambio completo y casi nunca sale
+  positiva, así que la búsqueda se atora antes de tiempo.
+- **MOVER**: pasar una sola orden a otra línea que tenga receta para ese
+  diámetro.
 - **PERMUTAR**: intercambiar dos órdenes entre sus líneas. Sólo se explora
   desde líneas saturadas, que es donde están los kilos que se quedan fuera.
 
-El objetivo es **lexicográfico**: primero la tonelada que sale dentro del
-horizonte y, a igualdad de tonelada, las horas de línea que se liberan. Un
-movimiento nunca se acepta si cuesta tonelada.
+### El objetivo: balancear, no vaciar
+
+El objetivo es **lexicográfico en tres niveles**:
+
+1. la tonelada que sale dentro del horizonte;
+2. **el cierre del programa**, es decir las horas de la línea más cargada;
+3. las horas-línea totales.
+
+El nivel 2 es el que balancea, y es el importante. Sin él, la búsqueda vacía
+las líneas lentas hacia las rápidas: baja las horas totales, pero deja líneas
+paradas y **el programa sigue cerrando cuando termina la línea más cargada**,
+así que no se produce ni un kilo más. Lo que de verdad destraba la producción
+es que el material que sale de una línea lo levante otra.
+
+Por eso el número que importa no es "cuántas horas se ahorran" sino **en
+cuánto cierra el programa**. Si hoy cierra en 167 h porque una línea va
+sobrecargada y balanceado cierra en 98 h, en el mismo calendario caben 1.70
+veces las toneladas.
+
+Un movimiento nunca se acepta si cuesta tonelada, y nunca si atrasa el cierre
+del programa.
 
 Lo que se reporta es el **neto** entre el schedule original y el propuesto,
 no la bitácora de jugadas: la búsqueda local a veces mueve una orden y

@@ -22,7 +22,10 @@ LINEA_POR_INSTALAR = "ITW-15"
 
 # Supuestos por omision. PENDIENTES DE CONFIRMAR CON PLANTA.
 HORAS_SEMANA = 144.0  # 6 dias x 24 h
-EFICIENCIA = 0.85
+# Eficiencia desactivada a proposito: por ahora el analisis se hace contra la
+# velocidad de receta tal cual, sin castigarla. Cuando planta nos de un OEE
+# medido se sube aqui o por linea en el catalogo CSV.
+EFICIENCIA = 1.0
 MINUTOS_CAMBIO = 45.0
 
 

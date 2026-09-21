@@ -50,7 +50,7 @@ Opciones útiles:
 
 ```
 --horas 144            horas disponibles por línea en el horizonte
---eficiencia 0.85      eficiencia operativa aplicada a la velocidad de receta
+--eficiencia 1.0       eficiencia operativa (1.0 = velocidad de receta tal cual)
 --minutos-cambio 45    costo de un cambio de medida
 --itw15                simula ITW-15 ya instalada, para ver qué se le pasaría
 --catalogo lineas.csv  horas/eficiencia/cambio distintos por línea

@@ -12,12 +12,18 @@ aritmética. Hoy se corre con:
 | parámetro | valor supuesto | dónde se cambia |
 |---|---|---|
 | horas disponibles por línea | 144 h (6 días × 24 h) | `--horas` |
-| eficiencia operativa | 85 % | `--eficiencia` |
+| eficiencia operativa | **desactivada (100 %)** | `--eficiencia` |
 | minutos por cambio de medida | 45 min | `--minutos-cambio` |
+
+La eficiencia está **apagada a propósito**: por ahora el análisis se hace
+contra la velocidad de receta tal cual. Cuando haya un OEE medido se prende.
+
+El tiempo de cambio de medida resultó **poco sensible**: entre 0 y 90 minutos
+el incremento de producción calculado se mueve menos de 1 %. No es urgente
+afinarlo.
 
 **Preguntas:**
 - ¿Cuántos turnos por semana corre cada línea? ¿Todas igual?
-- ¿Hay un OEE o una eficiencia por línea ya medida?
 - ¿Cuánto tarda de verdad un cambio de medida? ¿Depende del salto de
   diámetro o del cambio de bobina de calentamiento?
 
@@ -38,24 +44,16 @@ usar ese mismo para que los números cuadren contra SAP.
 
 **Pregunta:** ¿con qué densidad calculan ustedes el peso del rollo?
 
-## 3. Discrepancia entre las dos tablas del WI
+## 3. Rango de diámetros por línea — RESUELTO
 
-La tabla de bobinas de calentamiento (*Heating Coils & Glass Tubes*, filas
-39–69) y la tabla de velocidades **no dicen lo mismo** sobre qué línea corre
-qué diámetro:
+La tabla de bobinas de calentamiento y la de velocidades no coinciden en qué
+línea corre qué diámetro (por ejemplo ITW-3 aparece hasta 18.50 mm en una y
+hasta 14.45 mm en la otra).
 
-| línea | según bobinas | según velocidades |
-|---|---|---|
-| ITW-3 | 5.54 – 18.50 mm | 5.49 – **14.45** mm |
-| ITW-5, ITW-6 | 5.54 – 18.50 mm | **11.50** – 18.05 mm |
-| ITW-10 | **11.5** – 18.0 mm | **5.49** – 18.55 mm |
-
-Hoy manda la **tabla de velocidades**, porque es la que trae el dato que
-necesitamos y porque una celda vacía es una señal explícita. Pero esto cambia
-a qué líneas puede proponerse mover una orden.
-
-**Pregunta:** ¿cuál de las dos refleja lo que la línea realmente puede correr
-hoy? Si ITW-3 sí corre hasta 18.5 mm, nos estamos perdiendo movimientos.
+**Confirmado con Florence:** manda la **tabla de velocidades**. Si un diámetro
+no trae velocidad en una línea es porque en la práctica ahí casi no se corre,
+aunque el rango de la bobina lo permita. El código ya se comporta así: celda
+vacía = esa línea no es candidata para esa orden.
 
 ## 4. Grado del material cuando la descripción no lo dice
 
@@ -80,8 +78,15 @@ las de ITW-2 se están calculando con la receta del devanador Neturen
 Si en la práctica ITW-2 corre con DEM seguido, su rendimiento real es bastante
 mayor que el que estamos calculando.
 
+**Es el supuesto que más mueve el resultado.** Sobre el programa del 17/09,
+ITW-2 es el cuello de botella de toda la planta: carga 65 t a 390 kg/h cuando
+el promedio de las otras 13 líneas es de 848 kg/h, y por eso el programa
+cierra en 167 h. Con devanador DEM ese cuello se reduce y el incremento de
+producción calculado baja de **+760 t a +400 t**.
+
 **Pregunta:** ¿cómo se decide en el piso qué devanador usa ITW-2? ¿Queda
-registrado en algún lado?
+registrado en algún lado? Y sobre todo: **¿por qué ITW-2 trae 65 t cargadas
+si es la línea más lenta para esos diámetros?**
 
 ## 6. Diámetro: ¿estirado o terminado?
 
