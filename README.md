@@ -41,7 +41,11 @@ supuestos, para poder volver a verlo y para comparar después lo que se
 recomendó contra lo que se hizo.
 
 El punto central es el **balance**: el programa tarda lo que tarda su línea
-más cargada. Mover trabajo a las líneas rápidas y dejar paradas a las
+más cargada. Y el dato que más sorprende: el ritmo de planta sólo sube 2 %
+al rebalancear, mientras el cierre baja 27 %. La ganancia no está en correr
+más rápido sino en no dejar líneas paradas — hasta el punto de que a veces
+conviene que una línea baje su kg/h con tal de descargar a la que frena a
+todas. Ver `docs/SUPUESTOS.md`. Mover trabajo a las líneas rápidas y dejar paradas a las
 lentas baja las horas totales pero no produce un kilo más. Lo que destraba
 la producción es que el material que sale de una línea lo levante otra.
 

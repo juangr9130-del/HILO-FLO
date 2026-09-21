@@ -304,6 +304,13 @@ td.vacia { color: #c8ced6; }
 td.mejor { background: #f2f9f5; color: var(--verde); font-weight: 600; }
 .scroll { max-height: 70vh; overflow: auto; }
 
+td.mezcla { text-align: left; font-size: 12px; color: var(--texto-tenue); }
+td.mezcla .cuantas {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  color: var(--azul);
+}
+
 p.nota-tabla {
   margin: 0;
   padding: 12px 18px;

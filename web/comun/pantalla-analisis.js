@@ -331,6 +331,106 @@ function montarAnalisis(api = {}) {
   }
 
   /**
+   * Output por linea: a que kg/h corre cada una segun la mezcla de diametros
+   * que le toca, antes y despues.
+   *
+   * Es la pregunta natural -- "si rebalanceamos, cuanto sube la
+   * productividad" -- y la respuesta suele sorprender: el ritmo apenas se
+   * mueve. Alguna linea incluso baja a proposito, porque absorbe alambre mas
+   * delgado para descargar a la que estaba frenando todo el programa. Por eso
+   * la tabla muestra tambien la mezcla: sin ella un -12% parece un error.
+   */
+  function pintarTablaRitmo() {
+    const filas = paquete.lineas.filter((l) => l.actual.ordenes || l.propuesto.ordenes);
+    const a = paquete.analisis;
+
+    $('resumen-ritmo').textContent =
+      `plant average ${num(a.ritmoActual)} → ${num(a.ritmoPropuesto)} kg/h ` +
+      `(${a.ritmoCambioPct >= 0 ? '+' : ''}${num(a.ritmoCambioPct, 1)}%)`;
+
+    $('tabla-ritmo').innerHTML = `
+      <tr>
+        <th rowspan="2">Line</th>
+        <th colspan="2" class="grupo">Output kg/h</th>
+        <th rowspan="2">Change</th>
+        <th colspan="2" class="grupo">Diameters run</th>
+      </tr>
+      <tr>
+        <th class="sub">Before</th><th class="sub">After</th>
+        <th class="sub">Before</th><th class="sub">After</th>
+      </tr>
+      ${filas.map((l) => renglonRitmo(l)).join('')}
+      <tr class="totales">
+        <td>Plant average</td>
+        <td class="num">${num(a.ritmoActual)}</td>
+        <td class="num">${num(a.ritmoPropuesto)}</td>
+        <td class="num" style="color:${a.ritmoCambioPct >= 0 ? 'var(--verde)' : 'var(--rojo)'}">
+          ${a.ritmoCambioPct >= 0 ? '+' : ''}${num(a.ritmoCambioPct, 1)}%
+        </td>
+        <td class="num" colspan="2"></td>
+      </tr>`;
+
+    pintarNotaRitmo();
+  }
+
+  function renglonRitmo(l) {
+    const antes = l.actual.kgHora;
+    const despues = l.propuesto.kgHora;
+    const pct = antes > 0 ? (despues / antes - 1) * 100 : 0;
+    const color = pct > 0.05 ? 'var(--verde)' : pct < -0.05 ? 'var(--rojo)' : 'var(--texto-tenue)';
+    return `<tr>
+      <td><b>${l.linea}</b> <span style="color:var(--texto-tenue)">${l.workCenter}</span></td>
+      <td class="num">${antes ? num(antes) : '—'}</td>
+      <td class="num">${despues ? num(despues) : '—'}</td>
+      <td class="num" style="color:${color}">${
+        Math.abs(pct) < 0.05 ? '—' : `${pct > 0 ? '+' : ''}${num(pct, 1)}%`
+      }</td>
+      <td class="mezcla">${mezcla(l.actual.diametros)}</td>
+      <td class="mezcla">${mezcla(l.propuesto.diametros)}</td>
+    </tr>`;
+  }
+
+  /** "6 · 14.50–15.09 mm" — cuántas medidas y en qué rango. */
+  function mezcla(diametros) {
+    if (!diametros?.length) return '—';
+    const min = num(diametros[0], 2);
+    const max = num(diametros[diametros.length - 1], 2);
+    const rango = min === max ? `${min} mm` : `${min}–${max} mm`;
+    return `<span class="cuantas">${diametros.length}</span> · ${rango}`;
+  }
+
+  /**
+   * Sin esta nota la tabla se malinterpreta al derecho y al reves: se espera
+   * que el ritmo suba mucho (sube 2%) y una linea que baja parece un error.
+   */
+  function pintarNotaRitmo() {
+    const nota = $('nota-ritmo');
+    if (!nota) return;
+    const a = paquete.analisis;
+    const peor = paquete.lineas
+      .filter((l) => l.actual.kgHora && l.propuesto.kgHora)
+      .map((l) => ({ l, pct: (l.propuesto.kgHora / l.actual.kgHora - 1) * 100 }))
+      .sort((x, y) => x.pct - y.pct)[0];
+
+    const bajan =
+      peor && peor.pct < -1
+        ? `Some lines get <b>slower</b> on purpose — ${peor.l.linea} drops ${num(Math.abs(peor.pct), 1)}% ` +
+          'because it takes on thinner wire so the bottleneck line stops holding everyone back. ' +
+          'A line running fewer kg/h is fine if it lets the plant finish sooner. '
+        : '';
+
+    nota.innerHTML =
+      `Rebalancing barely changes how fast the lines run: the plant average goes from ` +
+      `<b>${num(a.ritmoActual)}</b> to <b>${num(a.ritmoPropuesto)} kg/h</b>, just ` +
+      `<b>${a.ritmoCambioPct >= 0 ? '+' : ''}${num(a.ritmoCambioPct, 1)}%</b>. ` +
+      bajan +
+      `<br>Almost all of the gain comes from <b>not leaving lines idle</b>, not from running faster: ` +
+      `just spreading today's hours evenly, without moving a single order to a faster line, would ` +
+      `already finish in <b>${num(a.cierreSoloBalance, 1)} h</b> instead of ${num(a.makespanActual, 1)} h. ` +
+      `That is the real lever.`;
+  }
+
+  /**
    * La matriz kg/h. Recibe los datos ya armados porque cada interfaz los
    * consigue distinto: el demo la calcula en el navegador y el modulo
    * instalado la pide a la API.
@@ -374,6 +474,7 @@ function montarAnalisis(api = {}) {
       pintarTablero();
       pintarConsejos();
       pintarTablaLineas();
+      pintarTablaRitmo();
       if (api.obtenerMatriz) pintarMatrizRendimiento(await api.obtenerMatriz(paquete));
     },
 

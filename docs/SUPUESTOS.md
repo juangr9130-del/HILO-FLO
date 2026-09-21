@@ -56,6 +56,28 @@ además sirve de bitácora: si al hacer el backtest (ver `VALIDACION.md`) el
 kg/h real no coincide con el calculado en una línea, ahí es donde se corrige
 y queda registro de por qué.
 
+## 2c. De dónde viene realmente la oportunidad — BALANCE, no ritmo
+
+La intuición dice que rebalancear sube la productividad porque las órdenes
+se van a líneas más rápidas. Con el schedule del 17/09 eso es casi falso, y
+vale la pena tenerlo claro antes de prometer nada.
+
+| | antes | después |
+|---|---|---|
+| ritmo de planta | 840 kg/h | 858 kg/h (**+2.1 %**) |
+| cierre del programa | 132.1 h | 96.5 h (**−27 %**) |
+
+**Sólo repartir las horas de hoy en partes iguales, sin mover una sola orden
+a una línea más rápida, ya cerraría en 96.3 h.** Es decir: prácticamente toda
+la ganancia viene de que ninguna línea se quede parada esperando, no de que
+las líneas corran más rápido.
+
+Eso tiene una consecuencia que sorprende en la pantalla de *Output per line*:
+**algunas líneas quedan más lentas a propósito**. ITW-8 baja 12.1 % porque
+absorbe alambre de 9.53 mm para descargar a ITW-2, que era la que frenaba
+todo el programa. Una línea con menos kg/h está bien si con eso la planta
+cierra antes; optimizar el kg/h línea por línea sería optimizar lo que no es.
+
 ## 3. Rango de diámetros por línea — RESUELTO
 
 La tabla de bobinas de calentamiento y la de velocidades no coinciden en qué

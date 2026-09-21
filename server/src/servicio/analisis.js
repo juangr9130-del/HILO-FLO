@@ -155,6 +155,7 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
       toneladasIncremento: redondear(propuesta.toneladasPorBalanceo, 1),
       toneladasDentroDelHorizonte: redondear(propuesta.deltaToneladas, 2),
       ordenesMovidas: movimientos.reduce((t, m) => t + m.ordenes, 0),
+      ...productividad(evaluacion, ev2, propuesta),
       avisos: reunirAvisos(programa, lineas, tabla, evaluacion),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
@@ -173,7 +174,49 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
   };
 }
 
+/**
+ * Las dos causas de la oportunidad, que se confunden facil:
+ *
+ *   RITMO    cada linea corre su mezcla de diametros a cierto kg/h. Mover
+ *            ordenes a lineas mas rapidas sube el ritmo promedio de la planta.
+ *   BALANCE  el programa cierra cuando termina su linea mas cargada, asi que
+ *            repartir la carga evita que las demas se queden paradas.
+ *
+ * No se reparten en una suma a proposito. Se intento y da cero por ritmo, lo
+ * que se lee como un error cuando en realidad es el hallazgo: con el schedule
+ * del 17/09 el ritmo sube 2.1% y el cierre baja 27%, asi que practicamente
+ * toda la ganancia es balance. Se publican los dos numeros por separado, mas
+ * el cierre que se alcanzaria balanceando SIN mover nada a una linea mas
+ * rapida, que es la vara para comparar.
+ */
+function productividad(evaluacion, ev2, propuesta) {
+  const ritmo = (ev) => {
+    let kg = 0;
+    let horas = 0;
+    for (const r of ev.lineas.values()) {
+      kg += r.kgProgramados;
+      horas += r.horasProduccion;
+    }
+    return horas > 0 ? kg / horas : 0;
+  };
+
+  const antes = ritmo(evaluacion);
+  const despues = ritmo(ev2);
+
+  // El mejor cierre posible sin cambiar una sola hora de corrida: repartir
+  // las horas de hoy en partes iguales entre las lineas disponibles.
+  const activas = [...evaluacion.lineas.values()].filter((r) => r.linea.activa).length;
+
+  return {
+    ritmoActual: redondear(antes, 1),
+    ritmoPropuesto: redondear(despues, 1),
+    ritmoCambioPct: antes > 0 ? redondear((despues / antes - 1) * 100, 1) : 0,
+    cierreSoloBalance: activas > 0 ? redondear(evaluacion.horasRequeridas / activas, 2) : 0,
+  };
+}
+
 function resumenLinea(r) {
+  const diametros = [...new Set(r.corridas.map((c) => c.orden.diametroMm))].sort((a, b) => a - b);
   return {
     ordenes: r.corridas.length,
     kg: redondear(r.kgProgramados, 0),
@@ -183,6 +226,12 @@ function resumenLinea(r) {
     horasCambio: redondear(r.horasCambio, 2),
     cambios: r.cambios,
     utilizacion: redondear(r.utilizacion * 100, 1),
+    // El ritmo de la linea segun la mezcla de diametros que le toca. Es lo
+    // que cambia el rebalanceo cuando mueve una orden a otra linea, y no
+    // siempre para arriba: una linea puede quedar mas lenta a proposito, si
+    // con eso descarga a la que estaba frenando todo el programa.
+    kgHora: r.horasProduccion > 0 ? redondear(r.kgProgramados / r.horasProduccion, 1) : 0,
+    diametros,
   };
 }
 

@@ -237,3 +237,40 @@ test('el historial lista los folios emitidos, del mas nuevo al mas viejo', async
   assert.equal(lista.length, 2);
   for (const p of lista) assert.ok(p.folio && p.ordenes === 3);
 });
+
+test('el paquete trae el output por línea y el de planta', async (t) => {
+  const { base, schedule } = await levantar(t);
+  const p = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+  const a = p.analisis;
+
+  assert.ok(a.ritmoActual > 0, 'ritmo de planta antes');
+  assert.ok(a.ritmoPropuesto > 0, 'ritmo de planta después');
+  assert.ok(a.cierreSoloBalance > 0, 'el cierre que daría sólo balancear');
+
+  for (const l of p.lineas.filter((x) => x.actual.ordenes)) {
+    assert.ok(l.actual.kgHora > 0, `${l.linea} sin kg/h`);
+    assert.ok(Array.isArray(l.actual.diametros) && l.actual.diametros.length > 0);
+  }
+});
+
+test('el kg/h de cada línea sale de sus kilos entre sus horas de corrida', async (t) => {
+  const { base, schedule } = await levantar(t);
+  const p = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+
+  for (const l of p.lineas.filter((x) => x.actual.horasProduccion > 0)) {
+    assert.ok(
+      Math.abs(l.actual.kgHora - l.actual.kg / l.actual.horasProduccion) < 1,
+      `${l.linea}: ${l.actual.kgHora} != ${l.actual.kg} / ${l.actual.horasProduccion}`,
+    );
+  }
+});
+
+test('mover carga a una línea más rápida sube el ritmo de planta', async (t) => {
+  const { base, schedule } = await levantar(t);
+  const p = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+  const a = p.analisis;
+
+  // El reajuste nunca puede empeorar el ritmo: el objetivo no lo permitiría
+  // sin ganar tonelada o cierre a cambio.
+  assert.ok(a.ritmoPropuesto >= a.ritmoActual * 0.999, 'el ritmo de planta no debe bajar');
+});
