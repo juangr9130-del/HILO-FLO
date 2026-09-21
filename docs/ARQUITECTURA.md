@@ -170,6 +170,7 @@ prueba que truena si las dos dejan de coincidir.
 | `GET` | `/api/programas` | historial de folios |
 | `POST` | `/api/programas` | **sube el schedule, emite folio y devuelve el análisis** |
 | `GET` | `/api/programas/:folio` | vuelve a pintar un folio anterior |
+| `DELETE` | `/api/programas/:folio` | lo quita de la lista (lo marca `descartado`) |
 | `GET` | `/api/programas/:folio/rendimiento` | matriz kg/h por diámetro y línea |
 | `POST` | `/api/programas/:folio/movimientos/:id` | el programador marca si aceptó el consejo |
 
@@ -186,6 +187,16 @@ a lo que de verdad se cargó ese día, con los supuestos con los que se corrió.
 
 El consecutivo sale de `MAX(folio)` del año, no de un contador aparte, para
 que no se desincronice si alguien borra un renglón.
+
+### Borrar un folio no lo borra
+
+El botón *Delete* del historial marca el folio como `descartado` y deja de
+listarse, pero el renglón sigue en la base. Un folio es el registro de lo que
+se le enseñó al programador ese día; borrarlo de verdad perdería el rastro de
+una decisión que quizá ya se tomó en piso.
+
+En el módulo demo sí se borra, porque ahí el historial vive en el navegador y
+no hay nada que auditar.
 
 ## Pendientes de despliegue
 

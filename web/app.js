@@ -81,32 +81,28 @@ function marcarProgramaDesactualizado() {
   analisis.marcarDesactualizado();
 }
 
+const historial = montarHistorial({
+  listar: () => fetch('/api/programas').then((r) => r.json()),
+  abrir: async (folio) => {
+    const r = await fetch(`/api/programas/${folio}`);
+    if (r.ok) mostrar(await r.json());
+  },
+  borrar: async (folio) => {
+    const r = await fetch(`/api/programas/${folio}`, { method: 'DELETE' });
+    if (!r.ok) mostrarError((await r.json()).error);
+  },
+  alBorrar: (folio) => {
+    // Si era el que se estaba viendo, no tiene caso dejar las pantallas.
+    if (paquete?.folio !== folio) return;
+    paquete = null;
+    $('folio').hidden = true;
+    actualizarTabs();
+    abrirPanel('carga');
+  },
+});
+
 async function pintarHistorial() {
-  const lista = await (await fetch('/api/programas')).json();
-  if (!lista.length) return ($('historial').innerHTML = '');
-  $('historial').innerHTML = `
-    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Previous programs</h3>
-    <table>
-      <tr><th>Ticket</th><th>File</th><th>Orders</th><th>Tons</th><th>Opportunity</th></tr>
-      ${lista
-        .map(
-          (p) => `<tr>
-            <td><a href="#" data-folio="${p.folio}">${p.folio}</a></td>
-            <td style="text-align:left;color:var(--texto-tenue)">${p.archivo ?? ''}</td>
-            <td class="num">${num(p.ordenes)}</td>
-            <td class="num">${num((p.kilogramos ?? 0) / 1000, 1)}</td>
-            <td class="num" style="color:var(--verde)">+${num(p.toneladasIncremento, 1)} t</td>
-          </tr>`,
-        )
-        .join('')}
-    </table>`;
-  $('historial').querySelectorAll('a[data-folio]').forEach((a) =>
-    a.addEventListener('click', async (ev) => {
-      ev.preventDefault();
-      const r = await fetch(`/api/programas/${a.dataset.folio}`);
-      if (r.ok) mostrar(await r.json());
-    }),
-  );
+  await historial.refrescar();
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +128,8 @@ $('analizar').addEventListener('click', async () => {
   $('analizar').disabled = false;
 
   if (!r.ok) return mostrarError((await r.json()).error);
-  mostrar(await r.json());
+  await mostrar(await r.json());
+  await pintarHistorial();
 });
 
 // ---------------------------------------------------------------------------

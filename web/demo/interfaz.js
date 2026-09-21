@@ -108,6 +108,7 @@ $('analizar').addEventListener('click', async () => {
     estado.programas.unshift(nuevo);
     estado.programas = estado.programas.slice(0, 5);
     guardarEstado();
+    pintarHistorial();
     await mostrar(nuevo);
   } catch (e) {
     mostrarError(e.message);
@@ -130,31 +131,28 @@ function revisarListo() {
   $('analizar').disabled = !$('archivo-schedule').files.length;
 }
 
+const historial = montarHistorial({
+  listar: async () => estado.programas,
+  abrir: (folio) => {
+    const p = estado.programas.find((x) => x.folio === folio);
+    if (p) mostrar(p);
+  },
+  borrar: async (folio) => {
+    estado.programas = estado.programas.filter((p) => p.folio !== folio);
+    guardarEstado();
+  },
+  alBorrar: (folio) => {
+    // Si era el que se estaba viendo, no tiene caso dejar las pantallas.
+    if (paquete?.folio !== folio) return;
+    paquete = null;
+    $('folio').hidden = true;
+    actualizarTabs();
+    abrirPanel('carga');
+  },
+});
+
 function pintarHistorial() {
-  if (!estado.programas.length) return ($('historial').innerHTML = '');
-  $('historial').innerHTML = `
-    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Previous programs</h3>
-    <table>
-      <tr><th>Ticket</th><th>File</th><th>Orders</th><th>Tons</th><th>Opportunity</th></tr>
-      ${estado.programas
-        .map(
-          (p) => `<tr>
-            <td><a href="#" data-folio="${p.folio}">${p.folio}</a></td>
-            <td style="text-align:left;color:var(--texto-tenue)">${p.archivo ?? ''}</td>
-            <td class="num">${num(p.ordenes)}</td>
-            <td class="num">${num(p.kilogramos / 1000, 1)}</td>
-            <td class="num" style="color:var(--verde)">+${num(p.analisis.toneladasIncremento, 1)} t</td>
-          </tr>`,
-        )
-        .join('')}
-    </table>`;
-  for (const a of $('historial').querySelectorAll('a[data-folio]')) {
-    a.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      const p = estado.programas.find((x) => x.folio === a.dataset.folio);
-      if (p) mostrar(p);
-    });
-  }
+  historial.refrescar();
 }
 
 // --- pintado -----------------------------------------------------------------

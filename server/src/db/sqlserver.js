@@ -341,9 +341,29 @@ export class RepositorioSql {
               a.toneladas_incremento AS toneladasIncremento
          FROM flo_programa p
          LEFT JOIN flo_analisis a ON a.programa_id = p.programa_id
+        WHERE p.estatus <> 'descartado'
         ORDER BY p.cargado_en DESC`,
     );
     return r.recordset;
+  }
+
+  /**
+   * Quitar un folio de la lista NO lo borra de la base: lo marca como
+   * descartado. Un folio es el registro de lo que se le enseno al programador
+   * ese dia, con sus supuestos; borrarlo de verdad perderia el rastro de una
+   * decision que quiza ya se tomo en piso. Deja de listarse, que es lo que se
+   * busca, y sigue ahi para auditar.
+   */
+  async borrarPrograma(folio) {
+    const r = await this.pool
+      .request()
+      .input('folio', sql.VarChar(20), folio)
+      .query(
+        `UPDATE flo_programa SET estatus = 'descartado'
+          OUTPUT INSERTED.folio
+          WHERE folio = @folio AND estatus <> 'descartado'`,
+      );
+    return r.recordset[0] ? { folio } : null;
   }
 
   /**

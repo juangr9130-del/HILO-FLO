@@ -274,3 +274,30 @@ test('mover carga a una línea más rápida sube el ritmo de planta', async (t) 
   // sin ganar tonelada o cierre a cambio.
   assert.ok(a.ritmoPropuesto >= a.ritmoActual * 0.999, 'el ritmo de planta no debe bajar');
 });
+
+test('se puede quitar un folio de la lista', async (t) => {
+  const { base, schedule } = await levantar(t);
+  const a = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+  const b = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+  assert.equal((await (await fetch(`${base}/api/programas`)).json()).length, 2);
+
+  const r = await fetch(`${base}/api/programas/${a.folio}`, { method: 'DELETE' });
+  assert.equal(r.status, 200);
+
+  const lista = await (await fetch(`${base}/api/programas`)).json();
+  assert.deepEqual(lista.map((p) => p.folio), [b.folio]);
+});
+
+test('quitar un folio que no existe responde 404', async (t) => {
+  const { base } = await levantar(t);
+  const r = await fetch(`${base}/api/programas/FLO-1999-0001`, { method: 'DELETE' });
+  assert.equal(r.status, 404);
+});
+
+test('el folio quitado no se vuelve a listar aunque se pida dos veces', async (t) => {
+  const { base, schedule } = await levantar(t);
+  const p = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+  assert.equal((await fetch(`${base}/api/programas/${p.folio}`, { method: 'DELETE' })).status, 200);
+  assert.equal((await fetch(`${base}/api/programas/${p.folio}`, { method: 'DELETE' })).status, 404);
+  assert.deepEqual(await (await fetch(`${base}/api/programas`)).json(), []);
+});

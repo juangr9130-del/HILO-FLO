@@ -311,6 +311,18 @@ td.mezcla .cuantas {
   color: var(--azul);
 }
 
+button.borrar {
+  background: none;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  color: var(--texto-tenue);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+button.borrar:hover { border-color: var(--rojo); color: var(--rojo); }
+
 p.nota-tabla {
   margin: 0;
   padding: 12px 18px;

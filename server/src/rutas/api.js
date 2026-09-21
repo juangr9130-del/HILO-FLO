@@ -150,6 +150,18 @@ export function crearApi(repo) {
     }
   });
 
+  api.delete('/programas/:folio', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      const borrado = await repo.borrarPrograma(req.params.folio);
+      if (!borrado) {
+        return res.status(404).json({ error: `Ticket ${req.params.folio} does not exist.` });
+      }
+      res.json(borrado);
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
   api.post('/programas/:folio/movimientos/:id', async (req, res, siguiente) => {
     try {
       const m = await repo.marcarMovimiento(

@@ -48,6 +48,10 @@ export class RepositorioMemoria {
     return this.programas.get(folio) ?? null;
   }
 
+  async borrarPrograma(folio) {
+    return this.programas.delete(folio) ? { folio } : null;
+  }
+
   async listarProgramas() {
     return [...this.programas.values()]
       .map(({ folio, archivo, cargadoEn, cargadoPor, ordenes, kilogramos, analisis }) => ({

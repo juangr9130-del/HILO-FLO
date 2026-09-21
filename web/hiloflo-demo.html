@@ -337,6 +337,18 @@ td.mezcla .cuantas {
   color: var(--azul);
 }
 
+button.borrar {
+  background: none;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  color: var(--texto-tenue);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+button.borrar:hover { border-color: var(--rojo); color: var(--rojo); }
+
 p.nota-tabla {
   margin: 0;
   padding: 12px 18px;
@@ -3888,6 +3900,87 @@ function montarCatalogo(api) {
 }
 
 
+// ===== historial de programas ================================================
+//
+// La lista de folios anteriores, con el boton de borrar. La usan las dos
+// interfaces; cada una le inyecta de donde sale la lista y que significa
+// borrar (en el demo se va del navegador, en el modulo instalado se marca
+// como descartado y deja de listarse).
+
+/**
+ * @param {object} api
+ *   listar()        -> [{folio, archivo, cargadoEn, ordenes, kilogramos, analisis}]
+ *   abrir(folio)    -> muestra ese folio
+ *   borrar(folio)   -> lo quita de la lista
+ *   alBorrar(folio) -> se llama despues, por si era el que se estaba viendo
+ */
+function montarHistorial(api) {
+  const $ = (id) => document.getElementById(id);
+  const num = (v, d = 0) =>
+    (v ?? 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  async function refrescar() {
+    const lista = await api.listar();
+    const caja = $('historial');
+    if (!caja) return;
+
+    if (!lista.length) {
+      caja.innerHTML = '';
+      return;
+    }
+
+    caja.innerHTML = `
+      <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Previous programs</h3>
+      <table>
+        <tr>
+          <th>Ticket</th><th>File</th><th>Orders</th><th>Tons</th>
+          <th>Opportunity</th><th></th>
+        </tr>
+        ${lista.map((p) => renglon(p)).join('')}
+      </table>`;
+
+    for (const a of caja.querySelectorAll('a[data-folio]')) {
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        api.abrir(a.dataset.folio);
+      });
+    }
+    for (const b of caja.querySelectorAll('button[data-borrar]')) {
+      b.addEventListener('click', () => borrar(b.dataset.borrar));
+    }
+  }
+
+  function renglon(p) {
+    // Un folio de una version anterior puede no traer el analisis completo.
+    // Se lista igual, pero marcado, para que se pueda borrar.
+    const t = p.analisis?.toneladasIncremento ?? p.toneladasIncremento;
+    const oportunidad =
+      t === undefined || t === null
+        ? '<span style="color:var(--ambar)">older version</span>'
+        : `<span style="color:var(--verde)">+${num(t, 1)} t</span>`;
+    return `<tr>
+      <td><a href="#" data-folio="${p.folio}">${p.folio}</a></td>
+      <td style="text-align:left;color:var(--texto-tenue)">${p.archivo ?? ''}</td>
+      <td class="num">${num(p.ordenes)}</td>
+      <td class="num">${num((p.kilogramos ?? 0) / 1000, 1)}</td>
+      <td class="num">${oportunidad}</td>
+      <td style="text-align:right">
+        <button class="borrar" data-borrar="${p.folio}" title="Delete this ticket">Delete</button>
+      </td>
+    </tr>`;
+  }
+
+  async function borrar(folio) {
+    if (!confirm(`Delete ticket ${folio}? This cannot be undone.`)) return;
+    await api.borrar(folio);
+    api.alBorrar?.(folio);
+    await refrescar();
+  }
+
+  return { refrescar };
+}
+
+
 // ===== interfaz del demo ======================================================
 //
 // Lo mismo que hace web/app.js, pero sin servidor: el analisis corre aqui
@@ -3998,6 +4091,7 @@ $('analizar').addEventListener('click', async () => {
     estado.programas.unshift(nuevo);
     estado.programas = estado.programas.slice(0, 5);
     guardarEstado();
+    pintarHistorial();
     await mostrar(nuevo);
   } catch (e) {
     mostrarError(e.message);
@@ -4020,31 +4114,28 @@ function revisarListo() {
   $('analizar').disabled = !$('archivo-schedule').files.length;
 }
 
+const historial = montarHistorial({
+  listar: async () => estado.programas,
+  abrir: (folio) => {
+    const p = estado.programas.find((x) => x.folio === folio);
+    if (p) mostrar(p);
+  },
+  borrar: async (folio) => {
+    estado.programas = estado.programas.filter((p) => p.folio !== folio);
+    guardarEstado();
+  },
+  alBorrar: (folio) => {
+    // Si era el que se estaba viendo, no tiene caso dejar las pantallas.
+    if (paquete?.folio !== folio) return;
+    paquete = null;
+    $('folio').hidden = true;
+    actualizarTabs();
+    abrirPanel('carga');
+  },
+});
+
 function pintarHistorial() {
-  if (!estado.programas.length) return ($('historial').innerHTML = '');
-  $('historial').innerHTML = `
-    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Previous programs</h3>
-    <table>
-      <tr><th>Ticket</th><th>File</th><th>Orders</th><th>Tons</th><th>Opportunity</th></tr>
-      ${estado.programas
-        .map(
-          (p) => `<tr>
-            <td><a href="#" data-folio="${p.folio}">${p.folio}</a></td>
-            <td style="text-align:left;color:var(--texto-tenue)">${p.archivo ?? ''}</td>
-            <td class="num">${num(p.ordenes)}</td>
-            <td class="num">${num(p.kilogramos / 1000, 1)}</td>
-            <td class="num" style="color:var(--verde)">+${num(p.analisis.toneladasIncremento, 1)} t</td>
-          </tr>`,
-        )
-        .join('')}
-    </table>`;
-  for (const a of $('historial').querySelectorAll('a[data-folio]')) {
-    a.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      const p = estado.programas.find((x) => x.folio === a.dataset.folio);
-      if (p) mostrar(p);
-    });
-  }
+  historial.refrescar();
 }
 
 // --- pintado -----------------------------------------------------------------
