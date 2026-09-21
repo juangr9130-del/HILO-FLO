@@ -85,10 +85,38 @@ export function avisoSinReceta(evaluacion) {
   };
 }
 
+/**
+ * Lineas donde el piso freno una mejora.
+ *
+ * El algoritmo encontro material que corre mas rapido en otro lado, pero
+ * moverlo dejaba la linea casi sin trabajo. Eso es una decision de planta,
+ * no del algoritmo, asi que se dice en vez de esconderse: si esa semana la
+ * linea de todos modos no se va a correr, el programador puede bajar el piso
+ * y quedarse con la mejora.
+ */
+export function avisoPiso(propuesta) {
+  const lineas = propuesta.lineasEnElPiso?.() ?? [];
+  if (!lineas.length) return null;
+  return {
+    tipo: 'piso_alcanzado',
+    severidad: 'nota',
+    piso: propuesta.limites.piso,
+    lineas: lineas.map((clave) => ({
+      linea: clave,
+      horas: propuesta.evaluacionPropuesta.lineas.get(clave).horasRequeridas,
+      ordenes: propuesta.evaluacionPropuesta.lineas.get(clave).corridas.length,
+    })),
+  };
+}
+
 /** Todos los avisos aplicables, de mayor a menor severidad. */
-export function reunirAvisos(programa, lineas, tabla, evaluacion) {
+export function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null) {
   const orden = { error: 0, nota: 1 };
-  return [avisoSinReceta(evaluacion), avisoDevanador(programa, lineas, tabla, evaluacion)]
+  return [
+    avisoSinReceta(evaluacion),
+    avisoDevanador(programa, lineas, tabla, evaluacion),
+    propuesta ? avisoPiso(propuesta) : null,
+  ]
     .filter(Boolean)
     .sort((a, b) => orden[a.severidad] - orden[b.severidad]);
 }

@@ -134,3 +134,138 @@ test('la propuesta nunca empeora el schedule', () => {
   assert.ok(propuesta.deltaKg >= 0);
   assert.ok(propuesta.makespanPropuesto <= propuesta.makespanOriginal);
 });
+
+// ---------------------------------------------------------------------------
+// Objetivo de rendimiento, con techo y piso
+// ---------------------------------------------------------------------------
+
+/** kg/h de esa orden en esa linea, para comparar origen contra destino. */
+const ritmo = (t, linea, orden) => t.kgHora(linea, orden);
+
+test('rendimiento nunca manda material a una linea mas lenta', () => {
+  // ITW-1 (100 mm/s) e ITW-7 (200) para 14.7 mm. Todo empieza en ITW-7, que
+  // es la rapida: el objetivo de calendario querria devolver carga a ITW-1
+  // para emparejar, y eso corre el material a la mitad de velocidad.
+  const p = programa([1, 2, 3, 4].map((n) => orden(`A${n}`, 14.7, 3000, 'ITW-7', { secuencia: n })));
+  const t = tabla();
+
+  const propuesta = buscarOportunidades(p, lineas(), t, { objetivo: 'rendimiento' });
+
+  for (const o of propuesta.programaPropuesto.ordenes) {
+    const original = p.ordenes.find((x) => x.id === o.id);
+    if (o.linea === original.linea) continue;
+    assert.ok(
+      ritmo(t, o.linea, o) >= ritmo(t, original.linea, original),
+      `${o.id}: ${original.linea} (${ritmo(t, original.linea, original)}) -> ${o.linea} (${ritmo(t, o.linea, o)})`,
+    );
+  }
+});
+
+test('calendario si puede mandarlo a una linea mas lenta, y por eso empareja', () => {
+  // El mismo caso con el otro objetivo: reparte entre las dos lineas aunque
+  // ITW-1 sea la mitad de rapida, porque cierra antes. Es el intercambio que
+  // Florence tiene que elegir, y las dos ramas siguen vivas.
+  const p = programa([1, 2, 3, 4].map((n) => orden(`A${n}`, 14.7, 3000, 'ITW-7', { secuencia: n })));
+
+  const propuesta = buscarOportunidades(p, lineas(), tabla(), { objetivo: 'calendario' });
+  const r = propuesta.evaluacionPropuesta.lineas;
+
+  assert.ok(r.get('ITW-1').horasRequeridas > 0, 'calendario debe repartir hacia ITW-1');
+});
+
+// Lineas con horizonte holgado: asi nada se queda fuera y el piso se prueba
+// solo, sin que la excepcion de "rescatar tonelada" lo pase por encima.
+const lineasHolgadas = () => [
+  linea('ITW-1', { horasDisponibles: 300 }),
+  linea('ITW-7', { horasDisponibles: 300 }),
+  linea('ITW-13', { horasDisponibles: 300 }),
+];
+
+/** 8 ordenes de 6 t en ITW-1: 12.5 h cada una, 100 h en total. */
+const ochoEnItw1 = () =>
+  programa(
+    [1, 2, 3, 4, 5, 6, 7, 8].map((n) => orden(`A${n}`, 14.7, 6000, 'ITW-1', { secuencia: n })),
+  );
+
+test('el piso impide dejar una linea sin trabajo', () => {
+  const p = ochoEnItw1();
+
+  // Sin piso, las ocho se van a ITW-7 (el doble de rapida) y ITW-1 queda vacia.
+  const sinPiso = buscarOportunidades(p, lineasHolgadas(), tabla(), { objetivo: 'rendimiento' });
+  assert.equal(
+    sinPiso.evaluacionPropuesta.lineas.get('ITW-1').corridas.length,
+    0,
+    'sin piso, el rendimiento puro vacia la linea lenta',
+  );
+
+  // Con piso de 60 h solo pueden irse tres (100 - 3 x 12.5 = 62.5 h); la
+  // cuarta la dejaria en 50 h y se frena.
+  const conPiso = buscarOportunidades(p, lineasHolgadas(), tabla(), {
+    objetivo: 'rendimiento',
+    pisoHoras: 60,
+  });
+  const r = conPiso.evaluacionPropuesta.lineas.get('ITW-1');
+  assert.ok(r.corridas.length > 0, 'con piso, ITW-1 no se queda sin trabajo');
+  assert.ok(r.horasRequeridas >= 60, `ITW-1 quedo en ${r.horasRequeridas} h, debajo del piso`);
+});
+
+test('una linea que ya venia debajo del piso no se vacia mas', () => {
+  // El piso no fabrica trabajo: si la linea arranca con menos, lo que hace
+  // es impedir que le quiten lo poco que tiene.
+  const p = programa([1, 2].map((n) => orden(`A${n}`, 14.7, 6000, 'ITW-1', { secuencia: n })));
+  const propuesta = buscarOportunidades(p, lineasHolgadas(), tabla(), {
+    objetivo: 'rendimiento',
+    pisoHoras: 60,
+  });
+  assert.equal(propuesta.evaluacionPropuesta.lineas.get('ITW-1').corridas.length, 2);
+});
+
+test('el piso se reporta para que el programador sepa donde se freno', () => {
+  const propuesta = buscarOportunidades(ochoEnItw1(), lineasHolgadas(), tabla(), {
+    objetivo: 'rendimiento',
+    pisoHoras: 60,
+  });
+  assert.deepEqual(propuesta.lineasEnElPiso(), ['ITW-1']);
+});
+
+test('rescatar tonelada gana sobre el piso', () => {
+  // Si la linea se pasa del horizonte, ese material NO SE PRODUCE. Sacarlo
+  // vale mas que dejarle trabajo a la linea, y el piso no debe estorbarlo.
+  const cortas = [linea('ITW-1', { horasDisponibles: 40 }), linea('ITW-7', { horasDisponibles: 300 })];
+  const propuesta = buscarOportunidades(ochoEnItw1(), cortas, tabla(), {
+    objetivo: 'rendimiento',
+    pisoHoras: 60,
+  });
+  const kg = (ev) => [...ev.lineas.values()].reduce((t, r) => t + r.kgProducibles, 0);
+  assert.ok(
+    kg(propuesta.evaluacionPropuesta) > kg(propuesta.evaluacionOriginal),
+    'el piso no debe impedir rescatar tonelada que hoy se pierde',
+  );
+});
+
+test('el techo sale del programa original, no de un supuesto', () => {
+  // ITW-7 ya corre 4 ordenes; el techo es lo que la linea mas cargada lleva
+  // hoy, asi que ninguna linea puede terminar por encima de eso.
+  const p = programa([
+    ...[1, 2, 3].map((n) => orden(`A${n}`, 14.7, 3000, 'ITW-1', { secuencia: n })),
+    ...[1, 2].map((n) => orden(`B${n}`, 14.7, 3000, 'ITW-7', { secuencia: n + 10 })),
+  ]);
+  const inicial = buscarOportunidades(p, lineas(), tabla(), { objetivo: 'rendimiento' });
+  const techo = inicial.evaluacionOriginal.makespan;
+
+  for (const [clave, r] of inicial.evaluacionPropuesta.lineas) {
+    assert.ok(
+      r.horasRequeridas <= techo + 1e-6,
+      `${clave} quedo en ${r.horasRequeridas} h, arriba del techo de ${techo}`,
+    );
+  }
+});
+
+test('rendimiento nunca pierde tonelada contra el schedule original', () => {
+  const propuesta = buscarOportunidades(ochoEnItw1(), lineasHolgadas(), tabla(), {
+    objetivo: 'rendimiento',
+    pisoHoras: 60,
+  });
+  const kg = (ev) => [...ev.lineas.values()].reduce((t, r) => t + r.kgProducibles, 0);
+  assert.ok(kg(propuesta.evaluacionPropuesta) >= kg(propuesta.evaluacionOriginal) - 1e-6);
+});

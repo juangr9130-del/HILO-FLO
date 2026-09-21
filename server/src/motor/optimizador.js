@@ -28,21 +28,70 @@ export const UMBRAL_KG = 50;
 export const UMBRAL_HORAS = 0.5;
 
 /**
- * El objetivo es lexicografico, en tres niveles:
+ * Hay DOS objetivos posibles y no se puede tener los dos. Se eligen con
+ * `objetivo` (ver docs/SUPUESTOS.md, seccion 2d-E).
+ *
+ * CALENDARIO -- lexicografico en tres niveles:
  *
  *   1. la tonelada que sale dentro del horizonte          (PESO_KG)
  *   2. el cierre del programa, o sea la linea mas cargada (PESO_MAKESPAN)
  *   3. las horas-linea totales                            (peso 1)
  *
- * El nivel 2 es el que balancea. Sin el, la busqueda vacia las lineas lentas
- * hacia las rapidas y deja a las primeras ociosas: baja las horas totales
- * pero el programa sigue cerrando cuando termina la linea mas cargada, asi
- * que no se produce ni un kilo mas. Lo que de verdad destraba la produccion
- * es que el material que sale de una linea lo levante otra, y eso es
- * exactamente lo que premia minimizar la linea mas cargada.
+ * El nivel 2 es el que balancea, y es el que cierra el programa antes. Su
+ * costo: para emparejar hay que mandar material a lineas MAS LENTAS. Sobre
+ * el schedule del 17/09, 4 de 19 movimientos lo hacen, el peor de 849 a 525
+ * kg/h. No es un error, es el objetivo funcionando.
+ *
+ * RENDIMIENTO -- dos niveles:
+ *
+ *   1. la tonelada que sale dentro del horizonte          (PESO_KG)
+ *   2. las horas-linea totales                            (peso 1)
+ *
+ * Sin el makespan, la busqueda solo acepta un movimiento si la misma
+ * tonelada sale en menos horas de maquina. Nunca degrada material. A cambio
+ * no empareja, asi que el programa no cierra antes.
+ *
+ * Sin frenos ese objetivo vacia las lineas lentas: sobre el 17/09 dejaba
+ * ITW-3 con UN rollo y 2.8 h. Por eso RENDIMIENTO viene con dos limites
+ * (ver `Limites`), sin los cuales no se debe usar.
  */
 export const PESO_KG = 1000;
 export const PESO_MAKESPAN = 100;
+export const OBJETIVOS = ['rendimiento', 'calendario'];
+
+/**
+ * Los dos limites del objetivo de rendimiento.
+ *
+ * TECHO: ninguna linea recibe mas alla de lo que la mas cargada YA corre en
+ * el programa original. No es un supuesto: si hoy ITW-2 corre 129.6 h, esas
+ * horas son demostrablemente factibles. Se usa esto y no las 144 h del
+ * horizonte porque Florence confirmo que ese 144 es un relleno -- se puso
+ * porque no habia forma de ver las horas por linea, no porque se haya medido.
+ *
+ * PISO: ninguna linea baja de estas horas de trabajo. Una linea con dos
+ * rollos esta apagada en los hechos, y eso no se puede proponer. El numero
+ * lo da planta; 60 h es lo que eligio Florence para probar.
+ */
+export class Limites {
+  constructor({ techo = Infinity, piso = 0 } = {}) {
+    this.techo = techo;
+    this.piso = piso;
+  }
+
+  /**
+   * @param {number} horasOrigen  horas de la linea de la que sale material
+   * @param {number} horasDestino horas de la linea que lo recibe
+   * @param {number} deltaKg      tonelada que el movimiento rescata
+   */
+  permite(horasOrigen, horasDestino, deltaKg) {
+    // Rescatar tonelada que hoy no se produce gana sobre los dos limites:
+    // correr algo tarde es mejor que no correrlo.
+    if (deltaKg > 1e-6) return true;
+    if (horasDestino > this.techo + 1e-6) return false;
+    if (horasOrigen < this.piso - 1e-6) return false;
+    return true;
+  }
+}
 
 /**
  * Varias ordenes del mismo diametro que van de la misma linea a la misma.
@@ -98,12 +147,42 @@ export class Propuesta {
     evaluacionOriginal,
     evaluacionPropuesta,
     tabla,
+    objetivo = 'calendario',
+    limites = new Limites(),
   }) {
     this.programaOriginal = programaOriginal;
     this.programaPropuesto = programaPropuesto;
     this.evaluacionOriginal = evaluacionOriginal;
     this.evaluacionPropuesta = evaluacionPropuesta;
     this.tabla = tabla;
+    this.objetivo = objetivo;
+    this.limites = limites;
+  }
+
+  /**
+   * Las lineas donde el piso freno una mejora.
+   *
+   * Ahi habia material que corria mas rapido en otro lado, pero moverlo
+   * dejaba la linea sin trabajo. El programador tiene que verlo, porque es
+   * una decision de planta y no del algoritmo.
+   *
+   * Se piden las DOS condiciones: que la linea haya perdido carga y que haya
+   * quedado pegada al piso. Solo lo segundo marca de mas a las lineas que
+   * quedaron ligeras porque son rapidas, no porque se les haya frenado nada.
+   */
+  lineasEnElPiso() {
+    if (!(this.limites.piso > 0)) return [];
+    const topadas = [];
+    for (const [clave, r] of this.evaluacionPropuesta.lineas) {
+      if (!r.corridas.length) continue;
+      const antes = this.evaluacionOriginal.lineas.get(clave);
+      if (!antes || r.horasRequeridas >= antes.horasRequeridas - 1e-6) continue;
+      // Una banda del 5% y no la igualdad exacta: la linea se frena en el
+      // primer movimiento que la bajaria del piso, asi que queda un poco
+      // ARRIBA, no clavada en el numero.
+      if (r.horasRequeridas <= this.limites.piso * 1.05) topadas.push(clave);
+    }
+    return topadas;
   }
 
   get deltaKg() {
@@ -199,9 +278,11 @@ export class Propuesta {
  * entradas, que no cuesta nada.
  */
 class Estado {
-  constructor(programa, lineas, tabla) {
+  constructor(programa, lineas, tabla, { objetivo = 'calendario', limites = new Limites() } = {}) {
     this.lineas = new Map(lineas.map((l) => [l.clave, l]));
     this.tabla = tabla;
+    this.objetivo = objetivo;
+    this.limites = limites;
     this.asignacion = new Map(lineas.map((l) => [l.clave, programa.deLinea(l.clave)]));
     this.valor = new Map();
     for (const [clave, ordenes] of this.asignacion) {
@@ -214,7 +295,7 @@ class Estado {
     return [r.kgProducibles, r.horasRequeridas];
   }
 
-  static _puntaje(valor) {
+  static _puntaje(valor, objetivo) {
     let kg = 0;
     let suma = 0;
     let max = 0;
@@ -223,21 +304,37 @@ class Estado {
       suma += h;
       if (h > max) max = h;
     }
-    return kg * PESO_KG - max * PESO_MAKESPAN - suma;
+    // El objetivo de rendimiento simplemente no mira el makespan. Lo que
+    // queda -- tonelada primero, horas de maquina despues -- es exactamente
+    // "la misma tonelada en menos horas".
+    const peso = objetivo === 'rendimiento' ? 0 : PESO_MAKESPAN;
+    return kg * PESO_KG - max * peso - suma;
   }
 
-  /** [puntaje, deltaKg, deltaHoras] de sustituir esas lineas. */
+  /** [puntaje, deltaKg, deltaHoras, dentroDeLimites] de sustituir esas lineas. */
   _delta(claves, nuevos) {
     const candidato = new Map(this.valor);
     claves.forEach((clave, i) => candidato.set(clave, this._valor(clave, nuevos[i])));
-    const puntaje = Estado._puntaje(candidato) - Estado._puntaje(this.valor);
+    const puntaje =
+      Estado._puntaje(candidato, this.objetivo) - Estado._puntaje(this.valor, this.objetivo);
     let deltaKg = 0;
     let deltaHoras = 0;
     for (const clave of claves) {
       deltaKg += candidato.get(clave)[0] - this.valor.get(clave)[0];
       deltaHoras += this.valor.get(clave)[1] - candidato.get(clave)[1];
     }
-    return [puntaje, deltaKg, deltaHoras];
+
+    // Los limites se revisan contra las horas que quedarian, linea por linea:
+    // una permuta mueve material en los dos sentidos y cada lado tiene que
+    // aguantar tanto el techo como el piso.
+    let dentro = true;
+    for (const clave of claves) {
+      const antes = this.valor.get(clave)[1];
+      const despues = candidato.get(clave)[1];
+      if (despues > antes && !this.limites.permite(Infinity, despues, deltaKg)) dentro = false;
+      if (despues < antes && !this.limites.permite(despues, 0, deltaKg)) dentro = false;
+    }
+    return [puntaje, deltaKg, deltaHoras, dentro];
   }
 
   deltaMover(orden, destino) {
@@ -329,10 +426,24 @@ export function buscarOportunidades(
   programa,
   lineas,
   tabla,
-  { maxMovimientos = 400, permitirPermutas = true, umbralKg = UMBRAL_KG, umbralHoras = UMBRAL_HORAS } = {},
+  {
+    maxMovimientos = 400,
+    permitirPermutas = true,
+    umbralKg = UMBRAL_KG,
+    umbralHoras = UMBRAL_HORAS,
+    objetivo = 'calendario',
+    pisoHoras = 0,
+  } = {},
 ) {
   const evaluacionInicial = evaluarPrograma(programa, lineas, tabla);
-  const estado = new Estado(programa, lineas, tabla);
+
+  // El techo sale del programa original, no de un supuesto: la linea mas
+  // cargada de hoy demuestra que esas horas se pueden correr.
+  const limites =
+    objetivo === 'rendimiento'
+      ? new Limites({ techo: evaluacionInicial.makespan, piso: pisoHoras })
+      : new Limites();
+  const estado = new Estado(programa, lineas, tabla, { objetivo, limites });
   const destinosValidos = new Set(lineas.filter((l) => l.activa).map((l) => l.clave));
 
   for (let i = 0; i < maxMovimientos; i++) {
@@ -348,6 +459,8 @@ export function buscarOportunidades(
     evaluacionOriginal: evaluacionInicial,
     evaluacionPropuesta: evaluarPrograma(propuesto, lineas, tabla),
     tabla,
+    objetivo,
+    limites,
   });
 }
 
@@ -363,8 +476,8 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
     if (bloque.length < 2) continue; // de una sola se encarga la jugada 2
     for (const destino of estado.tabla.lineasPara(bloque[0])) {
       if (destino === bloque[0].linea || !destinosValidos.has(destino)) continue;
-      const [[puntaje], cambios] = estado.deltaMoverBloque(bloque, destino);
-      if (puntaje > mejorPuntaje) {
+      const [[puntaje, , , dentro], cambios] = estado.deltaMoverBloque(bloque, destino);
+      if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
         mejor = cambios;
       }
@@ -375,8 +488,8 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
   for (const orden of movibles) {
     for (const destino of estado.tabla.lineasPara(orden)) {
       if (destino === orden.linea || !destinosValidos.has(destino)) continue;
-      const [[puntaje], cambios] = estado.deltaMover(orden, destino);
-      if (puntaje > mejorPuntaje) {
+      const [[puntaje, , , dentro], cambios] = estado.deltaMover(orden, destino);
+      if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
         mejor = cambios;
       }
@@ -395,8 +508,8 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
           if (a.diametroMm === b.diametroMm) continue; // permutar iguales no cambia nada
           if (!estado.tabla.puedeCorrer(b.linea, a)) continue;
           if (!estado.tabla.puedeCorrer(a.linea, b)) continue;
-          const [[puntaje], cambios] = estado.deltaPermutar(a, b);
-          if (puntaje > mejorPuntaje) {
+          const [[puntaje, , , dentro], cambios] = estado.deltaPermutar(a, b);
+          if (puntaje > mejorPuntaje && dentro) {
             mejorPuntaje = puntaje;
             mejor = cambios;
           }

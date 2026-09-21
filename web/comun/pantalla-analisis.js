@@ -35,9 +35,41 @@ function montarAnalisis(api = {}) {
    */
   function pintarKpis() {
     const a = paquete.analisis;
+    // Los dos objetivos ganan cosas distintas, asi que las tarjetas tienen
+    // que decir cosas distintas. Con 'rendimiento' el cierre casi no se
+    // mueve a proposito: dejar ahi "0.5 h earlier / +4.1 t" escondia una
+    // ganancia real de 67 h y 59 t que la pestana de abajo si mostraba.
+    const bloques = (paquete.supuestos?.objetivo === 'rendimiento'
+      ? kpisRendimiento(a)
+      : kpisCalendario(a)
+    ).join('');
+    $('kpis-programacion').innerHTML = bloques;
+    $('kpis-analisis').innerHTML = bloques;
+    pintarAvisos(a.avisos ?? []);
+  }
+
+  /** Lo que gana el objetivo de rendimiento: la misma tonelada en menos horas. */
+  function kpisRendimiento(a) {
+    const gana = a.horasAhorradas > 0.05;
+    return [
+      kpi('Plant rate', num(a.ritmoPropuesto, 0), 'kg/h',
+          `${num(a.ritmoActual, 0)} kg/h today · ${a.ritmoCambioPct > 0 ? '+' : ''}${num(a.ritmoCambioPct, 1)}%`,
+          gana ? 'bueno' : ''),
+      kpi('Line hours saved', num(a.horasAhorradas, 1), 'h',
+          `${num(a.horasTotalesActual, 0)} → ${num(a.horasTotalesPropuesto, 0)} h · same ${num(a.toneladasActuales, 1)} t`,
+          gana ? 'bueno' : ''),
+      kpi('Worth in product', `+${num(a.toneladasPorTiempo, 1)}`, 't',
+          `what those hours make at ${num(a.ritmoPropuesto, 0)} kg/h`, gana ? 'bueno' : ''),
+      kpi('Orders to move', num(a.ordenesMovidas), `of ${num(paquete.ordenes)}`,
+          `${a.movimientos.length} moves · none to a slower line`, ''),
+    ];
+  }
+
+  /** Lo que gana el objetivo de calendario: cerrar antes. */
+  function kpisCalendario(a) {
     const gana = a.toneladasIncremento > 0.05;
     const ahorro = a.makespanActual - a.makespanPropuesto;
-    const bloques = [
+    return [
       kpi('Finishes today in', num(a.makespanActual, 1), 'h', `how long ${a.cuelloDeBotella} takes`, 'malo'),
       kpi('Rebalanced', num(a.makespanPropuesto, 1), 'h',
           `${num(ahorro, 1)} h earlier · same ${num(a.toneladasActuales, 1)} t`, gana ? 'bueno' : ''),
@@ -45,10 +77,7 @@ function montarAnalisis(api = {}) {
           `fits in the ${num(ahorro, 1)} h — needs orders to pull in`, gana ? 'bueno' : ''),
       kpi('Orders to move', num(a.ordenesMovidas), `of ${num(paquete.ordenes)}`,
           `${a.movimientos.length} moves`, ''),
-    ].join('');
-    $('kpis-programacion').innerHTML = bloques;
-    $('kpis-analisis').innerHTML = bloques;
-    pintarAvisos(a.avisos ?? []);
+    ];
   }
 
   /**
@@ -88,29 +117,43 @@ function montarAnalisis(api = {}) {
     const min = paquete.supuestos?.minutosCambio ?? 30;
     const signo = (v, d = 1) => `${v > 0 ? '+' : ''}${num(v, d)}`;
 
-    caja.innerHTML = [
+    // Con 'rendimiento' las dos primeras ya estan en las tarjetas de arriba;
+    // repetirlas aqui solo hace ruido. Lo que esta pantalla aporta es el
+    // desglose: cuanto es mezcla y cuanto es cambios.
+    const rendimiento = paquete.supuestos?.objetivo === 'rendimiento';
+    const totales = [
       kpi('Hours recovered', num(a.horasAhorradas, 1), 'h',
           `${num(horasAntes, 0)} → ${num(horasDespues, 0)} h added up over every line`,
           gana ? 'bueno' : ''),
       kpi('Worth in product', signo(a.toneladasPorTiempo), 't',
           `${num(a.horasAhorradas, 1)} h × ${num(a.ritmoPropuesto, 0)} kg/h plant average`,
           gana ? 'bueno' : ''),
+    ];
+    const partes = [
       kpi('From a faster mix', signo(a.toneladasPorRitmo), 't',
           `${signo(a.ritmoCambioPct)}% rate · ${num(a.ritmoActual, 0)} → ${num(a.ritmoPropuesto, 0)} kg/h · ${num(a.horasProduccionAhorradas, 1)} h`,
           ''),
       kpi('From fewer changeovers', signo(a.toneladasPorCambios), 't',
           `${a.cambiosEvitados} fewer size changes (${a.cambiosActual} → ${a.cambiosPropuesto}) × ${num(min, 0)} min`,
           ''),
-    ].join('');
+    ];
+    caja.innerHTML = (rendimiento ? partes : [...totales, ...partes]).join('');
+
+    const suman = rendimiento
+      ? `These two add up to the <b>+${num(a.toneladasPorTiempo, 1)} t</b> above: `
+      : 'The last two cards add up to the second one: ';
+    const contraste = rendimiento
+      ? ''
+      : `This is <b>not</b> the same as <b>Capacity freed up</b> above: that one is idle ` +
+        `calendar time on the lines that finish early, this one is time the plant stops ` +
+        `spending. Don't add them together.`;
 
     $('nota-ganancia').innerHTML =
-      `The last two cards add up to the second one: a line's hours are run time plus ` +
-      `changeover time and nothing else, so nothing is counted twice. ` +
-      `Tons are what those freed hours would make at the rebalanced plant rate — ` +
-      `you still need orders to fill them. ` +
-      `This is <b>not</b> the same as <b>Capacity freed up</b> above: that one is idle ` +
-      `calendar time on the lines that finish early, this one is time the plant stops ` +
-      `spending. Don't add them together.`;
+      suman +
+      `a line's hours are run time plus changeover time and nothing else, so nothing is ` +
+      `counted twice. Tons are what those freed hours would make at the rebalanced plant ` +
+      `rate — you still need orders to fill them. ` +
+      contraste;
   }
 
   function kpi(etiqueta, valor, unidad, pie, clase) {
@@ -129,8 +172,12 @@ function montarAnalisis(api = {}) {
            the analysis uses the new speeds.
          </div>`
       : '';
+    const pintores = {
+      devanador_no_indicado: pintarAvisoDevanador,
+      piso_alcanzado: pintarAvisoPiso,
+    };
     $('avisos').innerHTML = desactualizado + avisos
-      .map((av) => (av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av)))
+      .map((av) => (pintores[av.tipo] ?? pintarAvisoSinReceta)(av))
       .join('');
   }
 
@@ -144,6 +191,22 @@ function montarAnalisis(api = {}) {
       ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h more</b>` : ''}.
       <div style="margin-top:5px;color:var(--texto-tenue)">
         ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} orders, ${num(l.kilogramos)} kg`).join(' · ')}
+      </div>
+    </div>`;
+  }
+
+  function pintarAvisoPiso(av) {
+    return `<div class="aviso nota">
+      <strong>${av.lineas.length === 1 ? 'One line' : `${av.lineas.length} lines`} hit the
+      ${num(av.piso)} h floor, so some improvements were held back.</strong>
+      There was material that runs faster elsewhere, but moving it would have left
+      ${av.lineas.length === 1 ? 'the line' : 'those lines'} with almost nothing to run.
+      <div style="margin-top:5px;color:var(--texto-tenue)">
+        ${av.lineas.map((l) => `${l.linea}: ${num(l.horas, 1)} h, ${l.ordenes} coils`).join(' · ')}
+      </div>
+      <div style="margin-top:5px">
+        If ${av.lineas.length === 1 ? 'that line' : 'any of those lines'} is not going to run
+        this week anyway, lower the floor and the module will take those moves.
       </div>
     </div>`;
   }
@@ -387,6 +450,40 @@ function montarAnalisis(api = {}) {
     </span>`;
   }
 
+  /**
+   * El párrafo que explica de qué se trata la lista de movimientos.
+   *
+   * Cambia con el objetivo, igual que las tarjetas: con 'rendimiento' el
+   * cierre casi no se mueve a propósito, así que abrir con "termina 0.5 h
+   * antes" haría ver la propuesta como si no sirviera de nada.
+   */
+  function encabezadoConsejos(a) {
+    if (paquete.supuestos?.objetivo === 'rendimiento') {
+      return `Today the plant spends <b>${num(a.horasTotalesActual, 0)} line-hours</b> on these
+        <b>${num(a.toneladasActuales, 1)} t</b>. With these ${a.movimientos.length} moves it spends
+        <b>${num(a.horasTotalesPropuesto, 0)} h</b> — <b>${num(a.horasAhorradas, 1)} h less</b> for
+        the same tonnage, because every coil ends up on a line that runs it faster.
+        <div style="color:var(--texto-tenue);margin-top:6px">
+          <b>No coil is moved to a slower line.</b> Those hours are worth
+          <b style="color:var(--verde)">+${num(a.toneladasPorTiempo, 1)} t</b> if you have orders to
+          fill them with. The program does <b>not</b> finish earlier: evening out the lines would
+          take mixing in slower runs, and that is the trade this objective refuses to make.
+        </div>`;
+    }
+    return `Today the program finishes in <b>${num(a.makespanActual, 1)} h</b>, which is how long
+      <b>${a.cuelloDeBotella}</b> takes; the other lines finish earlier and sit idle.
+      With these ${a.movimientos.length} moves it finishes in
+      <b>${num(a.makespanPropuesto, 1)} h</b> — <b>${num(a.makespanActual - a.makespanPropuesto, 1)} h earlier</b>.
+      <div style="color:var(--texto-tenue);margin-top:6px">
+        The program still makes the same <b>${num(a.toneladasActuales, 1)} t</b>: rebalancing moves
+        work between lines, it does not create tonnage. What it creates is room — in the
+        <b>${num(a.makespanActual, 1)} h</b> the plant is already committing to this program,
+        <b>${num(a.factorProduccion, 2)}×</b> the work would fit, which is
+        <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b> if there are orders
+        to pull in from next week. If there aren't, the gain is simply finishing earlier.
+      </div>`;
+  }
+
   function pintarConsejos() {
     const a = paquete.analisis;
     if (!a.movimientos.length) {
@@ -396,20 +493,7 @@ function montarAnalisis(api = {}) {
     }
 
     $('consejos').innerHTML =
-      `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">
-        Today the program finishes in <b>${num(a.makespanActual, 1)} h</b>, which is how long
-        <b>${a.cuelloDeBotella}</b> takes; the other lines finish earlier and sit idle.
-        With these ${a.movimientos.length} moves it finishes in
-        <b>${num(a.makespanPropuesto, 1)} h</b> — <b>${num(a.makespanActual - a.makespanPropuesto, 1)} h earlier</b>.
-        <div style="color:var(--texto-tenue);margin-top:6px">
-          The program still makes the same <b>${num(a.toneladasActuales, 1)} t</b>: rebalancing moves
-          work between lines, it does not create tonnage. What it creates is room — in the
-          <b>${num(a.makespanActual, 1)} h</b> the plant is already committing to this program,
-          <b>${num(a.factorProduccion, 2)}×</b> the work would fit, which is
-          <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b> if there are orders
-          to pull in from next week. If there aren't, the gain is simply finishing earlier.
-        </div>
-      </div>` +
+      `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">${encabezadoConsejos(a)}</div>` +
       a.movimientos
         .map(
           (m) => `<div class="consejo" data-id="${m.id}" data-aceptado="${m.aceptado ?? ''}">

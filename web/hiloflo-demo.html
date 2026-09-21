@@ -1304,21 +1304,70 @@ const UMBRAL_KG = 50;
 const UMBRAL_HORAS = 0.5;
 
 /**
- * El objetivo es lexicografico, en tres niveles:
+ * Hay DOS objetivos posibles y no se puede tener los dos. Se eligen con
+ * `objetivo` (ver docs/SUPUESTOS.md, seccion 2d-E).
+ *
+ * CALENDARIO -- lexicografico en tres niveles:
  *
  *   1. la tonelada que sale dentro del horizonte          (PESO_KG)
  *   2. el cierre del programa, o sea la linea mas cargada (PESO_MAKESPAN)
  *   3. las horas-linea totales                            (peso 1)
  *
- * El nivel 2 es el que balancea. Sin el, la busqueda vacia las lineas lentas
- * hacia las rapidas y deja a las primeras ociosas: baja las horas totales
- * pero el programa sigue cerrando cuando termina la linea mas cargada, asi
- * que no se produce ni un kilo mas. Lo que de verdad destraba la produccion
- * es que el material que sale de una linea lo levante otra, y eso es
- * exactamente lo que premia minimizar la linea mas cargada.
+ * El nivel 2 es el que balancea, y es el que cierra el programa antes. Su
+ * costo: para emparejar hay que mandar material a lineas MAS LENTAS. Sobre
+ * el schedule del 17/09, 4 de 19 movimientos lo hacen, el peor de 849 a 525
+ * kg/h. No es un error, es el objetivo funcionando.
+ *
+ * RENDIMIENTO -- dos niveles:
+ *
+ *   1. la tonelada que sale dentro del horizonte          (PESO_KG)
+ *   2. las horas-linea totales                            (peso 1)
+ *
+ * Sin el makespan, la busqueda solo acepta un movimiento si la misma
+ * tonelada sale en menos horas de maquina. Nunca degrada material. A cambio
+ * no empareja, asi que el programa no cierra antes.
+ *
+ * Sin frenos ese objetivo vacia las lineas lentas: sobre el 17/09 dejaba
+ * ITW-3 con UN rollo y 2.8 h. Por eso RENDIMIENTO viene con dos limites
+ * (ver `Limites`), sin los cuales no se debe usar.
  */
 const PESO_KG = 1000;
 const PESO_MAKESPAN = 100;
+const OBJETIVOS = ['rendimiento', 'calendario'];
+
+/**
+ * Los dos limites del objetivo de rendimiento.
+ *
+ * TECHO: ninguna linea recibe mas alla de lo que la mas cargada YA corre en
+ * el programa original. No es un supuesto: si hoy ITW-2 corre 129.6 h, esas
+ * horas son demostrablemente factibles. Se usa esto y no las 144 h del
+ * horizonte porque Florence confirmo que ese 144 es un relleno -- se puso
+ * porque no habia forma de ver las horas por linea, no porque se haya medido.
+ *
+ * PISO: ninguna linea baja de estas horas de trabajo. Una linea con dos
+ * rollos esta apagada en los hechos, y eso no se puede proponer. El numero
+ * lo da planta; 60 h es lo que eligio Florence para probar.
+ */
+class Limites {
+  constructor({ techo = Infinity, piso = 0 } = {}) {
+    this.techo = techo;
+    this.piso = piso;
+  }
+
+  /**
+   * @param {number} horasOrigen  horas de la linea de la que sale material
+   * @param {number} horasDestino horas de la linea que lo recibe
+   * @param {number} deltaKg      tonelada que el movimiento rescata
+   */
+  permite(horasOrigen, horasDestino, deltaKg) {
+    // Rescatar tonelada que hoy no se produce gana sobre los dos limites:
+    // correr algo tarde es mejor que no correrlo.
+    if (deltaKg > 1e-6) return true;
+    if (horasDestino > this.techo + 1e-6) return false;
+    if (horasOrigen < this.piso - 1e-6) return false;
+    return true;
+  }
+}
 
 /**
  * Varias ordenes del mismo diametro que van de la misma linea a la misma.
@@ -1374,12 +1423,42 @@ class Propuesta {
     evaluacionOriginal,
     evaluacionPropuesta,
     tabla,
+    objetivo = 'calendario',
+    limites = new Limites(),
   }) {
     this.programaOriginal = programaOriginal;
     this.programaPropuesto = programaPropuesto;
     this.evaluacionOriginal = evaluacionOriginal;
     this.evaluacionPropuesta = evaluacionPropuesta;
     this.tabla = tabla;
+    this.objetivo = objetivo;
+    this.limites = limites;
+  }
+
+  /**
+   * Las lineas donde el piso freno una mejora.
+   *
+   * Ahi habia material que corria mas rapido en otro lado, pero moverlo
+   * dejaba la linea sin trabajo. El programador tiene que verlo, porque es
+   * una decision de planta y no del algoritmo.
+   *
+   * Se piden las DOS condiciones: que la linea haya perdido carga y que haya
+   * quedado pegada al piso. Solo lo segundo marca de mas a las lineas que
+   * quedaron ligeras porque son rapidas, no porque se les haya frenado nada.
+   */
+  lineasEnElPiso() {
+    if (!(this.limites.piso > 0)) return [];
+    const topadas = [];
+    for (const [clave, r] of this.evaluacionPropuesta.lineas) {
+      if (!r.corridas.length) continue;
+      const antes = this.evaluacionOriginal.lineas.get(clave);
+      if (!antes || r.horasRequeridas >= antes.horasRequeridas - 1e-6) continue;
+      // Una banda del 5% y no la igualdad exacta: la linea se frena en el
+      // primer movimiento que la bajaria del piso, asi que queda un poco
+      // ARRIBA, no clavada en el numero.
+      if (r.horasRequeridas <= this.limites.piso * 1.05) topadas.push(clave);
+    }
+    return topadas;
   }
 
   get deltaKg() {
@@ -1475,9 +1554,11 @@ class Propuesta {
  * entradas, que no cuesta nada.
  */
 class Estado {
-  constructor(programa, lineas, tabla) {
+  constructor(programa, lineas, tabla, { objetivo = 'calendario', limites = new Limites() } = {}) {
     this.lineas = new Map(lineas.map((l) => [l.clave, l]));
     this.tabla = tabla;
+    this.objetivo = objetivo;
+    this.limites = limites;
     this.asignacion = new Map(lineas.map((l) => [l.clave, programa.deLinea(l.clave)]));
     this.valor = new Map();
     for (const [clave, ordenes] of this.asignacion) {
@@ -1490,7 +1571,7 @@ class Estado {
     return [r.kgProducibles, r.horasRequeridas];
   }
 
-  static _puntaje(valor) {
+  static _puntaje(valor, objetivo) {
     let kg = 0;
     let suma = 0;
     let max = 0;
@@ -1499,21 +1580,37 @@ class Estado {
       suma += h;
       if (h > max) max = h;
     }
-    return kg * PESO_KG - max * PESO_MAKESPAN - suma;
+    // El objetivo de rendimiento simplemente no mira el makespan. Lo que
+    // queda -- tonelada primero, horas de maquina despues -- es exactamente
+    // "la misma tonelada en menos horas".
+    const peso = objetivo === 'rendimiento' ? 0 : PESO_MAKESPAN;
+    return kg * PESO_KG - max * peso - suma;
   }
 
-  /** [puntaje, deltaKg, deltaHoras] de sustituir esas lineas. */
+  /** [puntaje, deltaKg, deltaHoras, dentroDeLimites] de sustituir esas lineas. */
   _delta(claves, nuevos) {
     const candidato = new Map(this.valor);
     claves.forEach((clave, i) => candidato.set(clave, this._valor(clave, nuevos[i])));
-    const puntaje = Estado._puntaje(candidato) - Estado._puntaje(this.valor);
+    const puntaje =
+      Estado._puntaje(candidato, this.objetivo) - Estado._puntaje(this.valor, this.objetivo);
     let deltaKg = 0;
     let deltaHoras = 0;
     for (const clave of claves) {
       deltaKg += candidato.get(clave)[0] - this.valor.get(clave)[0];
       deltaHoras += this.valor.get(clave)[1] - candidato.get(clave)[1];
     }
-    return [puntaje, deltaKg, deltaHoras];
+
+    // Los limites se revisan contra las horas que quedarian, linea por linea:
+    // una permuta mueve material en los dos sentidos y cada lado tiene que
+    // aguantar tanto el techo como el piso.
+    let dentro = true;
+    for (const clave of claves) {
+      const antes = this.valor.get(clave)[1];
+      const despues = candidato.get(clave)[1];
+      if (despues > antes && !this.limites.permite(Infinity, despues, deltaKg)) dentro = false;
+      if (despues < antes && !this.limites.permite(despues, 0, deltaKg)) dentro = false;
+    }
+    return [puntaje, deltaKg, deltaHoras, dentro];
   }
 
   deltaMover(orden, destino) {
@@ -1605,10 +1702,24 @@ function buscarOportunidades(
   programa,
   lineas,
   tabla,
-  { maxMovimientos = 400, permitirPermutas = true, umbralKg = UMBRAL_KG, umbralHoras = UMBRAL_HORAS } = {},
+  {
+    maxMovimientos = 400,
+    permitirPermutas = true,
+    umbralKg = UMBRAL_KG,
+    umbralHoras = UMBRAL_HORAS,
+    objetivo = 'calendario',
+    pisoHoras = 0,
+  } = {},
 ) {
   const evaluacionInicial = evaluarPrograma(programa, lineas, tabla);
-  const estado = new Estado(programa, lineas, tabla);
+
+  // El techo sale del programa original, no de un supuesto: la linea mas
+  // cargada de hoy demuestra que esas horas se pueden correr.
+  const limites =
+    objetivo === 'rendimiento'
+      ? new Limites({ techo: evaluacionInicial.makespan, piso: pisoHoras })
+      : new Limites();
+  const estado = new Estado(programa, lineas, tabla, { objetivo, limites });
   const destinosValidos = new Set(lineas.filter((l) => l.activa).map((l) => l.clave));
 
   for (let i = 0; i < maxMovimientos; i++) {
@@ -1624,6 +1735,8 @@ function buscarOportunidades(
     evaluacionOriginal: evaluacionInicial,
     evaluacionPropuesta: evaluarPrograma(propuesto, lineas, tabla),
     tabla,
+    objetivo,
+    limites,
   });
 }
 
@@ -1639,8 +1752,8 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
     if (bloque.length < 2) continue; // de una sola se encarga la jugada 2
     for (const destino of estado.tabla.lineasPara(bloque[0])) {
       if (destino === bloque[0].linea || !destinosValidos.has(destino)) continue;
-      const [[puntaje], cambios] = estado.deltaMoverBloque(bloque, destino);
-      if (puntaje > mejorPuntaje) {
+      const [[puntaje, , , dentro], cambios] = estado.deltaMoverBloque(bloque, destino);
+      if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
         mejor = cambios;
       }
@@ -1651,8 +1764,8 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
   for (const orden of movibles) {
     for (const destino of estado.tabla.lineasPara(orden)) {
       if (destino === orden.linea || !destinosValidos.has(destino)) continue;
-      const [[puntaje], cambios] = estado.deltaMover(orden, destino);
-      if (puntaje > mejorPuntaje) {
+      const [[puntaje, , , dentro], cambios] = estado.deltaMover(orden, destino);
+      if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
         mejor = cambios;
       }
@@ -1671,8 +1784,8 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
           if (a.diametroMm === b.diametroMm) continue; // permutar iguales no cambia nada
           if (!estado.tabla.puedeCorrer(b.linea, a)) continue;
           if (!estado.tabla.puedeCorrer(a.linea, b)) continue;
-          const [[puntaje], cambios] = estado.deltaPermutar(a, b);
-          if (puntaje > mejorPuntaje) {
+          const [[puntaje, , , dentro], cambios] = estado.deltaPermutar(a, b);
+          if (puntaje > mejorPuntaje && dentro) {
             mejorPuntaje = puntaje;
             mejor = cambios;
           }
@@ -2975,10 +3088,38 @@ function avisoSinReceta(evaluacion) {
   };
 }
 
+/**
+ * Lineas donde el piso freno una mejora.
+ *
+ * El algoritmo encontro material que corre mas rapido en otro lado, pero
+ * moverlo dejaba la linea casi sin trabajo. Eso es una decision de planta,
+ * no del algoritmo, asi que se dice en vez de esconderse: si esa semana la
+ * linea de todos modos no se va a correr, el programador puede bajar el piso
+ * y quedarse con la mejora.
+ */
+function avisoPiso(propuesta) {
+  const lineas = propuesta.lineasEnElPiso?.() ?? [];
+  if (!lineas.length) return null;
+  return {
+    tipo: 'piso_alcanzado',
+    severidad: 'nota',
+    piso: propuesta.limites.piso,
+    lineas: lineas.map((clave) => ({
+      linea: clave,
+      horas: propuesta.evaluacionPropuesta.lineas.get(clave).horasRequeridas,
+      ordenes: propuesta.evaluacionPropuesta.lineas.get(clave).corridas.length,
+    })),
+  };
+}
+
 /** Todos los avisos aplicables, de mayor a menor severidad. */
-function reunirAvisos(programa, lineas, tabla, evaluacion) {
+function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null) {
   const orden = { error: 0, nota: 1 };
-  return [avisoSinReceta(evaluacion), avisoDevanador(programa, lineas, tabla, evaluacion)]
+  return [
+    avisoSinReceta(evaluacion),
+    avisoDevanador(programa, lineas, tabla, evaluacion),
+    propuesta ? avisoPiso(propuesta) : null,
+  ]
     .filter(Boolean)
     .sort((a, b) => orden[a.severidad] - orden[b.severidad]);
 }
@@ -3144,6 +3285,28 @@ const SUPUESTOS = {
   eficiencia: 1,
   minutosCambio: 30,
   maxMovimientos: 400,
+
+  /**
+   * Que busca el reajuste. Ver docs/SUPUESTOS.md, seccion 2d-E.
+   *
+   *   'rendimiento' la misma tonelada en menos horas de maquina. Nunca manda
+   *                 material a una linea mas lenta, pero no cierra antes.
+   *   'calendario'  cierra el programa lo antes posible. Empareja las lineas,
+   *                 y para emparejar a veces corre material mas lento.
+   *
+   * Florence eligio probar 'rendimiento'. Regresar al anterior es cambiar
+   * este valor a 'calendario': el otro objetivo sigue vivo y con pruebas.
+   */
+  objetivo: 'rendimiento',
+
+  /**
+   * Horas minimas de trabajo que le quedan a una linea despues del reajuste.
+   *
+   * Sin piso, 'rendimiento' vacia las lineas lentas: sobre el schedule del
+   * 17/09 dejaba ITW-3 con UN rollo y 2.8 h. Una linea asi esta apagada en
+   * los hechos y eso no se puede proponer. 60 h es lo que eligio Florence.
+   */
+  pisoHoras: 60,
 };
 
 function catalogoLineas({
@@ -3198,6 +3361,8 @@ function analizar(programa, puntos, supuestos = {}) {
   const evaluacion = evaluarPrograma(programa, lineas, tabla);
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
     maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
+    objetivo: supuestos.objetivo ?? SUPUESTOS.objetivo,
+    pisoHoras: supuestos.pisoHoras ?? SUPUESTOS.pisoHoras,
   });
 
   return { programa, lineas, tabla, evaluacion, propuesta };
@@ -3278,7 +3443,7 @@ function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evalu
       toneladasDentroDelHorizonte: redondear(propuesta.deltaToneladas, 2),
       ordenesMovidas: movimientos.reduce((t, m) => t + m.ordenes, 0),
       ...productividad(evaluacion, ev2, propuesta),
-      avisos: reunirAvisos(programa, lineas, tabla, evaluacion),
+      avisos: reunirAvisos(programa, lineas, tabla, evaluacion, propuesta),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
         linea: o.linea,
@@ -3471,9 +3636,41 @@ function montarAnalisis(api = {}) {
    */
   function pintarKpis() {
     const a = paquete.analisis;
+    // Los dos objetivos ganan cosas distintas, asi que las tarjetas tienen
+    // que decir cosas distintas. Con 'rendimiento' el cierre casi no se
+    // mueve a proposito: dejar ahi "0.5 h earlier / +4.1 t" escondia una
+    // ganancia real de 67 h y 59 t que la pestana de abajo si mostraba.
+    const bloques = (paquete.supuestos?.objetivo === 'rendimiento'
+      ? kpisRendimiento(a)
+      : kpisCalendario(a)
+    ).join('');
+    $('kpis-programacion').innerHTML = bloques;
+    $('kpis-analisis').innerHTML = bloques;
+    pintarAvisos(a.avisos ?? []);
+  }
+
+  /** Lo que gana el objetivo de rendimiento: la misma tonelada en menos horas. */
+  function kpisRendimiento(a) {
+    const gana = a.horasAhorradas > 0.05;
+    return [
+      kpi('Plant rate', num(a.ritmoPropuesto, 0), 'kg/h',
+          `${num(a.ritmoActual, 0)} kg/h today · ${a.ritmoCambioPct > 0 ? '+' : ''}${num(a.ritmoCambioPct, 1)}%`,
+          gana ? 'bueno' : ''),
+      kpi('Line hours saved', num(a.horasAhorradas, 1), 'h',
+          `${num(a.horasTotalesActual, 0)} → ${num(a.horasTotalesPropuesto, 0)} h · same ${num(a.toneladasActuales, 1)} t`,
+          gana ? 'bueno' : ''),
+      kpi('Worth in product', `+${num(a.toneladasPorTiempo, 1)}`, 't',
+          `what those hours make at ${num(a.ritmoPropuesto, 0)} kg/h`, gana ? 'bueno' : ''),
+      kpi('Orders to move', num(a.ordenesMovidas), `of ${num(paquete.ordenes)}`,
+          `${a.movimientos.length} moves · none to a slower line`, ''),
+    ];
+  }
+
+  /** Lo que gana el objetivo de calendario: cerrar antes. */
+  function kpisCalendario(a) {
     const gana = a.toneladasIncremento > 0.05;
     const ahorro = a.makespanActual - a.makespanPropuesto;
-    const bloques = [
+    return [
       kpi('Finishes today in', num(a.makespanActual, 1), 'h', `how long ${a.cuelloDeBotella} takes`, 'malo'),
       kpi('Rebalanced', num(a.makespanPropuesto, 1), 'h',
           `${num(ahorro, 1)} h earlier · same ${num(a.toneladasActuales, 1)} t`, gana ? 'bueno' : ''),
@@ -3481,10 +3678,7 @@ function montarAnalisis(api = {}) {
           `fits in the ${num(ahorro, 1)} h — needs orders to pull in`, gana ? 'bueno' : ''),
       kpi('Orders to move', num(a.ordenesMovidas), `of ${num(paquete.ordenes)}`,
           `${a.movimientos.length} moves`, ''),
-    ].join('');
-    $('kpis-programacion').innerHTML = bloques;
-    $('kpis-analisis').innerHTML = bloques;
-    pintarAvisos(a.avisos ?? []);
+    ];
   }
 
   /**
@@ -3524,29 +3718,43 @@ function montarAnalisis(api = {}) {
     const min = paquete.supuestos?.minutosCambio ?? 30;
     const signo = (v, d = 1) => `${v > 0 ? '+' : ''}${num(v, d)}`;
 
-    caja.innerHTML = [
+    // Con 'rendimiento' las dos primeras ya estan en las tarjetas de arriba;
+    // repetirlas aqui solo hace ruido. Lo que esta pantalla aporta es el
+    // desglose: cuanto es mezcla y cuanto es cambios.
+    const rendimiento = paquete.supuestos?.objetivo === 'rendimiento';
+    const totales = [
       kpi('Hours recovered', num(a.horasAhorradas, 1), 'h',
           `${num(horasAntes, 0)} → ${num(horasDespues, 0)} h added up over every line`,
           gana ? 'bueno' : ''),
       kpi('Worth in product', signo(a.toneladasPorTiempo), 't',
           `${num(a.horasAhorradas, 1)} h × ${num(a.ritmoPropuesto, 0)} kg/h plant average`,
           gana ? 'bueno' : ''),
+    ];
+    const partes = [
       kpi('From a faster mix', signo(a.toneladasPorRitmo), 't',
           `${signo(a.ritmoCambioPct)}% rate · ${num(a.ritmoActual, 0)} → ${num(a.ritmoPropuesto, 0)} kg/h · ${num(a.horasProduccionAhorradas, 1)} h`,
           ''),
       kpi('From fewer changeovers', signo(a.toneladasPorCambios), 't',
           `${a.cambiosEvitados} fewer size changes (${a.cambiosActual} → ${a.cambiosPropuesto}) × ${num(min, 0)} min`,
           ''),
-    ].join('');
+    ];
+    caja.innerHTML = (rendimiento ? partes : [...totales, ...partes]).join('');
+
+    const suman = rendimiento
+      ? `These two add up to the <b>+${num(a.toneladasPorTiempo, 1)} t</b> above: `
+      : 'The last two cards add up to the second one: ';
+    const contraste = rendimiento
+      ? ''
+      : `This is <b>not</b> the same as <b>Capacity freed up</b> above: that one is idle ` +
+        `calendar time on the lines that finish early, this one is time the plant stops ` +
+        `spending. Don't add them together.`;
 
     $('nota-ganancia').innerHTML =
-      `The last two cards add up to the second one: a line's hours are run time plus ` +
-      `changeover time and nothing else, so nothing is counted twice. ` +
-      `Tons are what those freed hours would make at the rebalanced plant rate — ` +
-      `you still need orders to fill them. ` +
-      `This is <b>not</b> the same as <b>Capacity freed up</b> above: that one is idle ` +
-      `calendar time on the lines that finish early, this one is time the plant stops ` +
-      `spending. Don't add them together.`;
+      suman +
+      `a line's hours are run time plus changeover time and nothing else, so nothing is ` +
+      `counted twice. Tons are what those freed hours would make at the rebalanced plant ` +
+      `rate — you still need orders to fill them. ` +
+      contraste;
   }
 
   function kpi(etiqueta, valor, unidad, pie, clase) {
@@ -3565,8 +3773,12 @@ function montarAnalisis(api = {}) {
            the analysis uses the new speeds.
          </div>`
       : '';
+    const pintores = {
+      devanador_no_indicado: pintarAvisoDevanador,
+      piso_alcanzado: pintarAvisoPiso,
+    };
     $('avisos').innerHTML = desactualizado + avisos
-      .map((av) => (av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av)))
+      .map((av) => (pintores[av.tipo] ?? pintarAvisoSinReceta)(av))
       .join('');
   }
 
@@ -3580,6 +3792,22 @@ function montarAnalisis(api = {}) {
       ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h more</b>` : ''}.
       <div style="margin-top:5px;color:var(--texto-tenue)">
         ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} orders, ${num(l.kilogramos)} kg`).join(' · ')}
+      </div>
+    </div>`;
+  }
+
+  function pintarAvisoPiso(av) {
+    return `<div class="aviso nota">
+      <strong>${av.lineas.length === 1 ? 'One line' : `${av.lineas.length} lines`} hit the
+      ${num(av.piso)} h floor, so some improvements were held back.</strong>
+      There was material that runs faster elsewhere, but moving it would have left
+      ${av.lineas.length === 1 ? 'the line' : 'those lines'} with almost nothing to run.
+      <div style="margin-top:5px;color:var(--texto-tenue)">
+        ${av.lineas.map((l) => `${l.linea}: ${num(l.horas, 1)} h, ${l.ordenes} coils`).join(' · ')}
+      </div>
+      <div style="margin-top:5px">
+        If ${av.lineas.length === 1 ? 'that line' : 'any of those lines'} is not going to run
+        this week anyway, lower the floor and the module will take those moves.
       </div>
     </div>`;
   }
@@ -3823,6 +4051,40 @@ function montarAnalisis(api = {}) {
     </span>`;
   }
 
+  /**
+   * El párrafo que explica de qué se trata la lista de movimientos.
+   *
+   * Cambia con el objetivo, igual que las tarjetas: con 'rendimiento' el
+   * cierre casi no se mueve a propósito, así que abrir con "termina 0.5 h
+   * antes" haría ver la propuesta como si no sirviera de nada.
+   */
+  function encabezadoConsejos(a) {
+    if (paquete.supuestos?.objetivo === 'rendimiento') {
+      return `Today the plant spends <b>${num(a.horasTotalesActual, 0)} line-hours</b> on these
+        <b>${num(a.toneladasActuales, 1)} t</b>. With these ${a.movimientos.length} moves it spends
+        <b>${num(a.horasTotalesPropuesto, 0)} h</b> — <b>${num(a.horasAhorradas, 1)} h less</b> for
+        the same tonnage, because every coil ends up on a line that runs it faster.
+        <div style="color:var(--texto-tenue);margin-top:6px">
+          <b>No coil is moved to a slower line.</b> Those hours are worth
+          <b style="color:var(--verde)">+${num(a.toneladasPorTiempo, 1)} t</b> if you have orders to
+          fill them with. The program does <b>not</b> finish earlier: evening out the lines would
+          take mixing in slower runs, and that is the trade this objective refuses to make.
+        </div>`;
+    }
+    return `Today the program finishes in <b>${num(a.makespanActual, 1)} h</b>, which is how long
+      <b>${a.cuelloDeBotella}</b> takes; the other lines finish earlier and sit idle.
+      With these ${a.movimientos.length} moves it finishes in
+      <b>${num(a.makespanPropuesto, 1)} h</b> — <b>${num(a.makespanActual - a.makespanPropuesto, 1)} h earlier</b>.
+      <div style="color:var(--texto-tenue);margin-top:6px">
+        The program still makes the same <b>${num(a.toneladasActuales, 1)} t</b>: rebalancing moves
+        work between lines, it does not create tonnage. What it creates is room — in the
+        <b>${num(a.makespanActual, 1)} h</b> the plant is already committing to this program,
+        <b>${num(a.factorProduccion, 2)}×</b> the work would fit, which is
+        <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b> if there are orders
+        to pull in from next week. If there aren't, the gain is simply finishing earlier.
+      </div>`;
+  }
+
   function pintarConsejos() {
     const a = paquete.analisis;
     if (!a.movimientos.length) {
@@ -3832,20 +4094,7 @@ function montarAnalisis(api = {}) {
     }
 
     $('consejos').innerHTML =
-      `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">
-        Today the program finishes in <b>${num(a.makespanActual, 1)} h</b>, which is how long
-        <b>${a.cuelloDeBotella}</b> takes; the other lines finish earlier and sit idle.
-        With these ${a.movimientos.length} moves it finishes in
-        <b>${num(a.makespanPropuesto, 1)} h</b> — <b>${num(a.makespanActual - a.makespanPropuesto, 1)} h earlier</b>.
-        <div style="color:var(--texto-tenue);margin-top:6px">
-          The program still makes the same <b>${num(a.toneladasActuales, 1)} t</b>: rebalancing moves
-          work between lines, it does not create tonnage. What it creates is room — in the
-          <b>${num(a.makespanActual, 1)} h</b> the plant is already committing to this program,
-          <b>${num(a.factorProduccion, 2)}×</b> the work would fit, which is
-          <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b> if there are orders
-          to pull in from next week. If there aren't, the gain is simply finishing earlier.
-        </div>
-      </div>` +
+      `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">${encabezadoConsejos(a)}</div>` +
       a.movimientos
         .map(
           (m) => `<div class="consejo" data-id="${m.id}" data-aceptado="${m.aceptado ?? ''}">
@@ -4565,7 +4814,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * paquete y del que lo lee, asi que cambiar cualquiera de ellos invalida lo
  * guardado sin que nadie se tenga que acordar.
  */
-const VERSION_PAQUETE = "3b279563b4de";
+const VERSION_PAQUETE = "10342e1f813c";
 
 let paquete = null;
 let estado = cargarEstado();

@@ -23,6 +23,28 @@ export const SUPUESTOS = {
   eficiencia: 1,
   minutosCambio: 30,
   maxMovimientos: 400,
+
+  /**
+   * Que busca el reajuste. Ver docs/SUPUESTOS.md, seccion 2d-E.
+   *
+   *   'rendimiento' la misma tonelada en menos horas de maquina. Nunca manda
+   *                 material a una linea mas lenta, pero no cierra antes.
+   *   'calendario'  cierra el programa lo antes posible. Empareja las lineas,
+   *                 y para emparejar a veces corre material mas lento.
+   *
+   * Florence eligio probar 'rendimiento'. Regresar al anterior es cambiar
+   * este valor a 'calendario': el otro objetivo sigue vivo y con pruebas.
+   */
+  objetivo: 'rendimiento',
+
+  /**
+   * Horas minimas de trabajo que le quedan a una linea despues del reajuste.
+   *
+   * Sin piso, 'rendimiento' vacia las lineas lentas: sobre el schedule del
+   * 17/09 dejaba ITW-3 con UN rollo y 2.8 h. Una linea asi esta apagada en
+   * los hechos y eso no se puede proponer. 60 h es lo que eligio Florence.
+   */
+  pisoHoras: 60,
 };
 
 export function catalogoLineas({
@@ -77,6 +99,8 @@ export function analizar(programa, puntos, supuestos = {}) {
   const evaluacion = evaluarPrograma(programa, lineas, tabla);
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
     maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
+    objetivo: supuestos.objetivo ?? SUPUESTOS.objetivo,
+    pisoHoras: supuestos.pisoHoras ?? SUPUESTOS.pisoHoras,
   });
 
   return { programa, lineas, tabla, evaluacion, propuesta };
@@ -157,7 +181,7 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
       toneladasDentroDelHorizonte: redondear(propuesta.deltaToneladas, 2),
       ordenesMovidas: movimientos.reduce((t, m) => t + m.ordenes, 0),
       ...productividad(evaluacion, ev2, propuesta),
-      avisos: reunirAvisos(programa, lineas, tabla, evaluacion),
+      avisos: reunirAvisos(programa, lineas, tabla, evaluacion, propuesta),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
         linea: o.linea,

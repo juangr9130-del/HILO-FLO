@@ -59,13 +59,26 @@ test('las toneladas del desglose salen del ritmo ya rebalanceado', () => {
   const a = paqueteDePrueba().analisis;
 
   const esperado = (horas) => Number(((horas * a.ritmoPropuesto) / 1000).toFixed(1));
-  // Se compara contra el ritmo redondeado que se publica, asi que hay que
-  // dejar el margen de ese redondeo.
-  assert.ok(Math.abs(a.toneladasPorRitmo - esperado(a.horasProduccionAhorradas)) <= 0.1);
-  assert.ok(Math.abs(a.toneladasPorCambios - esperado(a.horasCambioAhorradas)) <= 0.1);
+
+  // Se compara contra las cifras REDONDEADAS que se publican, asi que el
+  // margen tiene que cubrir tres redondeos: el de la tonelada de cada lado
+  // (+-0.05) y el del ritmo (+-0.05 kg/h sobre las horas que se multiplican).
+  // Con 0.1 pelado fallaba por 1e-15, que es ruido de punto flotante y no un
+  // error de la aritmetica.
+  const margen = (horas) => 0.1 + horas * 0.00005 + 1e-9;
+  const cuadra = (valor, horas) =>
+    assert.ok(
+      Math.abs(valor - esperado(horas)) <= margen(horas),
+      `${valor} != ${esperado(horas)} para ${horas} h`,
+    );
+
+  cuadra(a.toneladasPorRitmo, a.horasProduccionAhorradas);
+  cuadra(a.toneladasPorCambios, a.horasCambioAhorradas);
+  // Las tres cifras se redondean por separado antes de publicarse, asi que
+  // la suma de las dos parciales puede quedar a un redondeo de la total.
   assert.ok(
-    Math.abs(a.toneladasPorTiempo - (a.toneladasPorRitmo + a.toneladasPorCambios)) <= 0.1,
-    'las dos parciales tienen que dar la total',
+    Math.abs(a.toneladasPorTiempo - (a.toneladasPorRitmo + a.toneladasPorCambios)) <= 0.15,
+    `${a.toneladasPorRitmo} + ${a.toneladasPorCambios} != ${a.toneladasPorTiempo}`,
   );
 });
 
