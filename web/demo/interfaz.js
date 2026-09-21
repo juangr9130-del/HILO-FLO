@@ -9,6 +9,17 @@ const num = (v, d = 0) =>
 
 const LLAVE = 'hiloflo.demo.v1';
 
+/**
+ * Version de la forma del paquete que se guarda en el navegador.
+ *
+ * Se sube cada vez que el analisis agrega campos. Los folios guardados con
+ * una version anterior no los traen, y al abrirlos la pantalla pintaba ceros
+ * -- "plant average 0 kg/h" -- como si la planta estuviera parada. Ahora se
+ * descartan al arrancar; los ajustes del catalogo no, que cuestan mas de
+ * reponer que volver a subir un schedule.
+ */
+const VERSION_PAQUETE = 2;
+
 let paquete = null;
 let estado = cargarEstado();
 
@@ -26,11 +37,18 @@ function recetasVigentes() {
 // cuota llena), y si falla el demo sigue funcionando en memoria.
 
 function cargarEstado() {
+  const vacio = { consecutivo: 0, programas: [], ajustes: {} };
+  let guardado;
   try {
-    return JSON.parse(localStorage.getItem(LLAVE)) ?? { consecutivo: 0, programas: [], ajustes: {} };
+    guardado = JSON.parse(localStorage.getItem(LLAVE)) ?? vacio;
   } catch {
-    return { consecutivo: 0, programas: [], ajustes: {} };
+    return vacio;
   }
+  return {
+    ...vacio,
+    ...guardado,
+    programas: (guardado.programas ?? []).filter((p) => p.version === VERSION_PAQUETE),
+  };
 }
 
 function guardarEstado() {
@@ -86,6 +104,7 @@ $('analizar').addEventListener('click', async () => {
       ...resultado,
     });
 
+    nuevo.version = VERSION_PAQUETE;
     estado.programas.unshift(nuevo);
     estado.programas = estado.programas.slice(0, 5);
     guardarEstado();

@@ -3391,13 +3391,15 @@ function montarAnalisis(api = {}) {
       <tr>
         <th rowspan="2">Line</th>
         <th colspan="2" class="grupo">Orders</th>
-        <th colspan="2" class="grupo">Tons</th>
-        <th colspan="2" class="grupo">Hours</th>
-        <th rowspan="2">Change</th>
+        <th colspan="3" class="grupo">Tons</th>
+        <th colspan="3" class="grupo">Hours</th>
         <th colspan="2" class="grupo">Utilization</th>
       </tr>
       <tr>
-        ${'<th class="sub">Before</th><th class="sub">After</th>'.repeat(4)}
+        <th class="sub">Before</th><th class="sub">After</th>
+        <th class="sub">Before</th><th class="sub">After</th><th class="sub">+/−</th>
+        <th class="sub">Before</th><th class="sub">After</th><th class="sub">+/−</th>
+        <th class="sub">Before</th><th class="sub">After</th>
       </tr>
       ${filas.map((l) => renglonCarga(l)).join('')}
       <tr class="totales">
@@ -3406,6 +3408,7 @@ function montarAnalisis(api = {}) {
         <td class="num">${num(total.ordenesDespues)}</td>
         <td class="num">${num(total.kgAntes / 1000, 1)}</td>
         <td class="num">${num(total.kgDespues / 1000, 1)}</td>
+        <td class="num">${deltaToneladas((total.kgDespues - total.kgAntes) / 1000)}</td>
         <td class="num">${num(total.horasAntes, 1)}</td>
         <td class="num">${num(total.horasDespues, 1)}</td>
         <td class="num" style="color:${colorDelta(total.horasDespues - total.horasAntes)}">
@@ -3444,19 +3447,32 @@ function montarAnalisis(api = {}) {
   }
 
   function renglonCarga(l) {
-    const d = l.propuesto.horas - l.actual.horas;
+    const dh = l.propuesto.horas - l.actual.horas;
+    const dt = (l.propuesto.kg - l.actual.kg) / 1000;
     return `<tr>
       <td><b>${l.linea}</b> <span style="color:var(--texto-tenue)">${l.workCenter}</span></td>
       <td class="num">${l.actual.ordenes}</td>
       <td class="num ${l.propuesto.ordenes !== l.actual.ordenes ? 'cambio' : ''}">${l.propuesto.ordenes}</td>
       <td class="num">${num(l.actual.kg / 1000, 1)}</td>
-      <td class="num ${Math.abs(l.propuesto.kg - l.actual.kg) > 1 ? 'cambio' : ''}">${num(l.propuesto.kg / 1000, 1)}</td>
+      <td class="num">${num(l.propuesto.kg / 1000, 1)}</td>
+      <td class="num">${deltaToneladas(dt)}</td>
       <td class="num">${num(l.actual.horas, 1)}</td>
       <td class="num">${num(l.propuesto.horas, 1)}</td>
-      <td class="num" style="color:${colorDelta(d)}">${delta(d)}</td>
+      <td class="num" style="color:${colorDelta(dh)}">${delta(dh)}</td>
       <td class="num">${num(l.actual.utilizacion, 0)}%</td>
       <td class="num">${num(l.propuesto.utilizacion, 0)}%</td>
     </tr>`;
+  }
+
+  /**
+   * Toneladas que la linea gana o pierde en el reparto. Azul y no verde/rojo
+   * a proposito: que una linea ceda tonelada no es malo, es el reajuste
+   * haciendo su trabajo. Lo verde y lo rojo se reserva para las horas.
+   */
+  function deltaToneladas(t) {
+    if (Math.abs(t) < 0.05) return '<span style="color:var(--texto-tenue)">—</span>';
+    const color = t > 0 ? 'var(--azul-claro)' : 'var(--gris)';
+    return `<span style="color:${color};font-weight:600">${t > 0 ? '+' : '−'}${num(Math.abs(t), 1)}</span>`;
   }
 
   function delta(h) {
@@ -3484,8 +3500,20 @@ function montarAnalisis(api = {}) {
    * la tabla muestra tambien la mezcla: sin ella un -12% parece un error.
    */
   function pintarTablaRitmo() {
-    const filas = paquete.lineas.filter((l) => l.actual.ordenes || l.propuesto.ordenes);
     const a = paquete.analisis;
+    const tarjeta = $('tabla-ritmo')?.closest('.tarjeta');
+    if (!tarjeta) return;
+
+    // Un folio analizado con una version anterior no trae estos campos. Se
+    // esconde la tarjeta en vez de pintar ceros, que es lo que hacia antes y
+    // se lee como si la planta corriera a 0 kg/h.
+    if (!a.ritmoActual) {
+      tarjeta.hidden = true;
+      return;
+    }
+    tarjeta.hidden = false;
+
+    const filas = paquete.lineas.filter((l) => l.actual.ordenes || l.propuesto.ordenes);
 
     $('resumen-ritmo').textContent =
       `plant average ${num(a.ritmoActual)} → ${num(a.ritmoPropuesto)} kg/h ` +
@@ -3494,21 +3522,22 @@ function montarAnalisis(api = {}) {
     $('tabla-ritmo').innerHTML = `
       <tr>
         <th rowspan="2">Line</th>
-        <th colspan="2" class="grupo">Output kg/h</th>
-        <th rowspan="2">Change</th>
+        <th colspan="3" class="grupo">Output kg/h</th>
         <th colspan="2" class="grupo">Diameters run</th>
       </tr>
       <tr>
         <th class="sub">Before</th><th class="sub">After</th>
+        <th class="sub">+/− · tons in ${num(a.makespanPropuesto, 1)} h</th>
         <th class="sub">Before</th><th class="sub">After</th>
       </tr>
-      ${filas.map((l) => renglonRitmo(l)).join('')}
+      ${filas.map((l) => renglonRitmo(l, a.makespanPropuesto)).join('')}
       <tr class="totales">
         <td>Plant average</td>
         <td class="num">${num(a.ritmoActual)}</td>
         <td class="num">${num(a.ritmoPropuesto)}</td>
         <td class="num" style="color:${a.ritmoCambioPct >= 0 ? 'var(--verde)' : 'var(--rojo)'}">
-          ${a.ritmoCambioPct >= 0 ? '+' : ''}${num(a.ritmoCambioPct, 1)}%
+          ${a.ritmoCambioPct >= 0 ? '+' : ''}${num(a.ritmoCambioPct, 1)}% ·
+          ${deltaToneladas(((a.ritmoPropuesto - a.ritmoActual) * a.makespanPropuesto) / 1000)} t
         </td>
         <td class="num" colspan="2"></td>
       </tr>`;
@@ -3516,17 +3545,25 @@ function montarAnalisis(api = {}) {
     pintarNotaRitmo();
   }
 
-  function renglonRitmo(l) {
+  /**
+   * @param ventana  horas en que cierra el programa reajustado. El cambio de
+   *   ritmo se expresa tambien en toneladas sobre esa ventana, porque un
+   *   "+7.2%" no le dice nada a nadie y "+7.2 t" si.
+   */
+  function renglonRitmo(l, ventana) {
     const antes = l.actual.kgHora;
     const despues = l.propuesto.kgHora;
     const pct = antes > 0 ? (despues / antes - 1) * 100 : 0;
+    const toneladas = ((despues - antes) * ventana) / 1000;
     const color = pct > 0.05 ? 'var(--verde)' : pct < -0.05 ? 'var(--rojo)' : 'var(--texto-tenue)';
     return `<tr>
       <td><b>${l.linea}</b> <span style="color:var(--texto-tenue)">${l.workCenter}</span></td>
       <td class="num">${antes ? num(antes) : '—'}</td>
       <td class="num">${despues ? num(despues) : '—'}</td>
       <td class="num" style="color:${color}">${
-        Math.abs(pct) < 0.05 ? '—' : `${pct > 0 ? '+' : ''}${num(pct, 1)}%`
+        Math.abs(pct) < 0.05
+          ? '—'
+          : `${pct > 0 ? '+' : ''}${num(pct, 1)}% · ${deltaToneladas(toneladas)} t`
       }</td>
       <td class="mezcla">${mezcla(l.actual.diametros)}</td>
       <td class="mezcla">${mezcla(l.propuesto.diametros)}</td>
@@ -3862,6 +3899,17 @@ const num = (v, d = 0) =>
 
 const LLAVE = 'hiloflo.demo.v1';
 
+/**
+ * Version de la forma del paquete que se guarda en el navegador.
+ *
+ * Se sube cada vez que el analisis agrega campos. Los folios guardados con
+ * una version anterior no los traen, y al abrirlos la pantalla pintaba ceros
+ * -- "plant average 0 kg/h" -- como si la planta estuviera parada. Ahora se
+ * descartan al arrancar; los ajustes del catalogo no, que cuestan mas de
+ * reponer que volver a subir un schedule.
+ */
+const VERSION_PAQUETE = 2;
+
 let paquete = null;
 let estado = cargarEstado();
 
@@ -3879,11 +3927,18 @@ function recetasVigentes() {
 // cuota llena), y si falla el demo sigue funcionando en memoria.
 
 function cargarEstado() {
+  const vacio = { consecutivo: 0, programas: [], ajustes: {} };
+  let guardado;
   try {
-    return JSON.parse(localStorage.getItem(LLAVE)) ?? { consecutivo: 0, programas: [], ajustes: {} };
+    guardado = JSON.parse(localStorage.getItem(LLAVE)) ?? vacio;
   } catch {
-    return { consecutivo: 0, programas: [], ajustes: {} };
+    return vacio;
   }
+  return {
+    ...vacio,
+    ...guardado,
+    programas: (guardado.programas ?? []).filter((p) => p.version === VERSION_PAQUETE),
+  };
 }
 
 function guardarEstado() {
@@ -3939,6 +3994,7 @@ $('analizar').addEventListener('click', async () => {
       ...resultado,
     });
 
+    nuevo.version = VERSION_PAQUETE;
     estado.programas.unshift(nuevo);
     estado.programas = estado.programas.slice(0, 5);
     guardarEstado();
