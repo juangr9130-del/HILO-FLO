@@ -34,7 +34,7 @@ export const config = {
   // Ver docs/SUPUESTOS.md.
   horasDisponibles: Number(process.env.FLO_HORAS ?? 144),
   eficiencia: Number(process.env.FLO_EFICIENCIA ?? 1),
-  minutosCambio: Number(process.env.FLO_MINUTOS_CAMBIO ?? 45),
+  minutosCambio: Number(process.env.FLO_MINUTOS_CAMBIO ?? 30),
   maxMovimientos: Number(process.env.FLO_MAX_MOVIMIENTOS ?? 400),
 };
 

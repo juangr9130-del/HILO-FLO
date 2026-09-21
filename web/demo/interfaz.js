@@ -18,7 +18,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * descartan al arrancar; los ajustes del catalogo no, que cuestan mas de
  * reponer que volver a subir un schedule.
  */
-const VERSION_PAQUETE = 2;
+const VERSION_PAQUETE = 3;
 
 let paquete = null;
 let estado = cargarEstado();

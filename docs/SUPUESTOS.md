@@ -13,14 +13,21 @@ aritmética. Hoy se corre con:
 |---|---|---|
 | horas disponibles por línea | 144 h (6 días × 24 h) | `FLO_HORAS` / `flo_parametro_linea` |
 | eficiencia operativa | **desactivada (100 %)** | `FLO_EFICIENCIA` |
-| minutos por cambio de medida | 45 min | `FLO_MINUTOS_CAMBIO` |
+| minutos por cambio de medida | 30 min | `FLO_MINUTOS_CAMBIO` |
 
 La eficiencia está **apagada a propósito**: por ahora el análisis se hace
 contra la velocidad de receta tal cual. Cuando haya un OEE medido se prende.
 
-El tiempo de cambio de medida resultó **poco sensible**: entre 0 y 90 minutos
-el incremento de producción calculado se mueve menos de 1 %. No es urgente
-afinarlo.
+Los **30 minutos** son el estándar que dio Florence. El tiempo de cambio
+resultó además **poco sensible**: entre 0 y 90 minutos el incremento de
+producción calculado se mueve menos de 1 %.
+
+El cambio se cobra cuando **cambia el diámetro** entre dos órdenes seguidas de
+la misma línea, no cuando cambia el número de parte. En el schedule del 17/09
+da casi lo mismo —75 números de parte contra 66 diámetros, prácticamente uno
+por diámetro— pero el diámetro es lo que obliga al ajuste de la línea, así que
+es lo que se cobra. Si en Florence un cambio de parte dentro del mismo diámetro
+también para la línea, hay que decirlo y se cambia el criterio.
 
 **Preguntas:**
 - ¿Cuántos turnos por semana corre cada línea? ¿Todas igual?

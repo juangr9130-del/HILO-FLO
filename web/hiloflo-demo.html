@@ -503,6 +503,12 @@ button.deshacer {
   <section id="panel-analisis" hidden>
     <div class="kpis" id="kpis-analisis"></div>
 
+    <div class="tarjeta" hidden>
+      <h2>Where the productivity gain comes from <small>tons the rebalance sets free</small></h2>
+      <div class="cuerpo"><div class="kpis" id="ganancia" style="margin:0"></div></div>
+      <p class="nota-tabla" id="nota-ganancia"></p>
+    </div>
+
     <div class="tarjeta">
       <h2>What to do <small>ranked by impact</small></h2>
       <div id="consejos"></div>
@@ -2910,7 +2916,7 @@ const LINEA_POR_INSTALAR = 'ITW-15';
 const SUPUESTOS = {
   horasDisponibles: 144,
   eficiencia: 1,
-  minutosCambio: 45,
+  minutosCambio: 30,
   maxMovimientos: 400,
 };
 
@@ -3078,30 +3084,71 @@ function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evalu
  * toda la ganancia es balance. Se publican los dos numeros por separado, mas
  * el cierre que se alcanzaria balanceando SIN mover nada a una linea mas
  * rapida, que es la vara para comparar.
+ *
+ * Aparte va el TIEMPO GANADO, que si suma exacto. Las horas de una linea son
+ * horas de corrida mas horas de cambio y nada mas, asi que el ahorro total se
+ * parte en esas dos y no hay forma de contar doble:
+ *
+ *   horas de corrida ahorradas  = mismos kg a un ritmo mejor
+ *   horas de cambio ahorradas   = cambios de medida evitados x el estandar
+ *   ------------------------------------------------------------------
+ *   horas ahorradas             = lo que se libera en toda la planta
+ *
+ * Cada renglon se pasa a toneladas al ritmo de la planta ya rebalanceada:
+ * es lo que esas horas producirian si se llenaran con mas material.
  */
 function productividad(evaluacion, ev2, propuesta) {
-  const ritmo = (ev) => {
+  const totales = (ev) => {
     let kg = 0;
-    let horas = 0;
+    let produccion = 0;
+    let cambio = 0;
+    let cambios = 0;
     for (const r of ev.lineas.values()) {
       kg += r.kgProgramados;
-      horas += r.horasProduccion;
+      produccion += r.horasProduccion;
+      cambio += r.horasCambio;
+      cambios += r.cambios;
     }
-    return horas > 0 ? kg / horas : 0;
+    return { kg, produccion, cambio, cambios, ritmo: produccion > 0 ? kg / produccion : 0 };
   };
 
-  const antes = ritmo(evaluacion);
-  const despues = ritmo(ev2);
+  const a = totales(evaluacion);
+  const d = totales(ev2);
 
   // El mejor cierre posible sin cambiar una sola hora de corrida: repartir
   // las horas de hoy en partes iguales entre las lineas disponibles.
   const activas = [...evaluacion.lineas.values()].filter((r) => r.linea.activa).length;
 
+  // Toneladas equivalentes: la hora liberada vale lo que la planta produce en
+  // una hora DESPUES del rebalanceo. Se usa el ritmo nuevo y no el viejo para
+  // no inflar la cifra con un ritmo que ya no aplica.
+  const enToneladas = (horas) => (horas * d.ritmo) / 1000;
+  const horasProduccionAhorradas = a.produccion - d.produccion;
+  const horasCambioAhorradas = a.cambio - d.cambio;
+
   return {
-    ritmoActual: redondear(antes, 1),
-    ritmoPropuesto: redondear(despues, 1),
-    ritmoCambioPct: antes > 0 ? redondear((despues / antes - 1) * 100, 1) : 0,
+    ritmoActual: redondear(a.ritmo, 1),
+    ritmoPropuesto: redondear(d.ritmo, 1),
+    ritmoCambioPct: a.ritmo > 0 ? redondear((d.ritmo / a.ritmo - 1) * 100, 1) : 0,
     cierreSoloBalance: activas > 0 ? redondear(evaluacion.horasRequeridas / activas, 2) : 0,
+
+    horasProduccionActual: redondear(a.produccion, 1),
+    horasProduccionPropuesto: redondear(d.produccion, 1),
+    horasProduccionAhorradas: redondear(horasProduccionAhorradas, 1),
+    horasCambioActual: redondear(a.cambio, 1),
+    horasCambioPropuesto: redondear(d.cambio, 1),
+    horasCambioAhorradas: redondear(horasCambioAhorradas, 1),
+    horasAhorradas: redondear(horasProduccionAhorradas + horasCambioAhorradas, 1),
+    cambiosActual: a.cambios,
+    cambiosPropuesto: d.cambios,
+    cambiosEvitados: a.cambios - d.cambios,
+
+    toneladasPorRitmo: redondear(enToneladas(horasProduccionAhorradas), 1),
+    toneladasPorCambios: redondear(enToneladas(horasCambioAhorradas), 1),
+    toneladasPorTiempo: redondear(
+      enToneladas(horasProduccionAhorradas + horasCambioAhorradas),
+      1,
+    ),
   };
 }
 
@@ -3204,6 +3251,68 @@ function montarAnalisis(api = {}) {
     $('kpis-programacion').innerHTML = bloques;
     $('kpis-analisis').innerHTML = bloques;
     pintarAvisos(a.avisos ?? []);
+  }
+
+  /**
+   * De dónde sale la productividad, en tarjetas.
+   *
+   * Las horas de una línea son horas de corrida más horas de cambio y nada
+   * más, así que el ahorro se parte en esas dos sin contar nada dos veces:
+   *
+   *   corrida ahorrada  = la misma tonelada a un ritmo mejor
+   *   cambio ahorrado   = cambios de medida evitados x el estándar
+   *   --------------------------------------------------------
+   *   horas ahorradas   = lo que se libera en toda la planta
+   *
+   * Cada renglón se traduce a tonelada al ritmo YA rebalanceado, que es lo
+   * que la planta produciría si esas horas se llenaran con más material.
+   *
+   * Ojo con confundirla con "Capacity freed up" de arriba: aquélla es hueco
+   * de calendario en las líneas que acaban antes, ésta es tiempo que deja de
+   * gastarse. No se suman.
+   */
+  function pintarGanancia() {
+    const a = paquete.analisis;
+    const caja = $('ganancia');
+    if (!caja) return;
+
+    // Los folios viejos se guardaron sin este desglose: mejor no dibujar la
+    // tarjeta que dibujarla en ceros.
+    if (a.horasAhorradas === undefined) {
+      caja.closest('.tarjeta').hidden = true;
+      return;
+    }
+    caja.closest('.tarjeta').hidden = false;
+
+    const horasAntes = a.horasProduccionActual + a.horasCambioActual;
+    const horasDespues = a.horasProduccionPropuesto + a.horasCambioPropuesto;
+    const gana = a.toneladasPorTiempo > 0.05;
+    const min = paquete.supuestos?.minutosCambio ?? 30;
+    const signo = (v, d = 1) => `${v > 0 ? '+' : ''}${num(v, d)}`;
+
+    caja.innerHTML = [
+      kpi('Hours recovered', num(a.horasAhorradas, 1), 'h',
+          `${num(horasAntes, 0)} → ${num(horasDespues, 0)} h added up over every line`,
+          gana ? 'bueno' : ''),
+      kpi('Worth in product', signo(a.toneladasPorTiempo), 't',
+          `${num(a.horasAhorradas, 1)} h × ${num(a.ritmoPropuesto, 0)} kg/h plant average`,
+          gana ? 'bueno' : ''),
+      kpi('From a faster mix', signo(a.toneladasPorRitmo), 't',
+          `${signo(a.ritmoCambioPct)}% rate · ${num(a.ritmoActual, 0)} → ${num(a.ritmoPropuesto, 0)} kg/h · ${num(a.horasProduccionAhorradas, 1)} h`,
+          ''),
+      kpi('From fewer changeovers', signo(a.toneladasPorCambios), 't',
+          `${a.cambiosEvitados} fewer size changes (${a.cambiosActual} → ${a.cambiosPropuesto}) × ${num(min, 0)} min`,
+          ''),
+    ].join('');
+
+    $('nota-ganancia').innerHTML =
+      `The last two cards add up to the second one: a line's hours are run time plus ` +
+      `changeover time and nothing else, so nothing is counted twice. ` +
+      `Tons are what those freed hours would make at the rebalanced plant rate — ` +
+      `you still need orders to fill them. ` +
+      `This is <b>not</b> the same as <b>Capacity freed up</b> above: that one is idle ` +
+      `calendar time on the lines that finish early, this one is time the plant stops ` +
+      `spending. Don't add them together.`;
   }
 
   function kpi(etiqueta, valor, unidad, pie, clase) {
@@ -3663,6 +3772,7 @@ function montarAnalisis(api = {}) {
       paquete = p;
       programaDesactualizado = false;
       pintarKpis();
+      pintarGanancia();
       pintarTablero();
       pintarConsejos();
       pintarTablaLineas();
@@ -4001,7 +4111,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * descartan al arrancar; los ajustes del catalogo no, que cuestan mas de
  * reponer que volver a subir un schedule.
  */
-const VERSION_PAQUETE = 2;
+const VERSION_PAQUETE = 3;
 
 let paquete = null;
 let estado = cargarEstado();

@@ -20,7 +20,7 @@ export const LINEA_POR_INSTALAR = 'ITW-15';
 export const SUPUESTOS = {
   horasDisponibles: 144,
   eficiencia: 1,
-  minutosCambio: 45,
+  minutosCambio: 30,
   maxMovimientos: 400,
 };
 
@@ -188,30 +188,71 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
  * toda la ganancia es balance. Se publican los dos numeros por separado, mas
  * el cierre que se alcanzaria balanceando SIN mover nada a una linea mas
  * rapida, que es la vara para comparar.
+ *
+ * Aparte va el TIEMPO GANADO, que si suma exacto. Las horas de una linea son
+ * horas de corrida mas horas de cambio y nada mas, asi que el ahorro total se
+ * parte en esas dos y no hay forma de contar doble:
+ *
+ *   horas de corrida ahorradas  = mismos kg a un ritmo mejor
+ *   horas de cambio ahorradas   = cambios de medida evitados x el estandar
+ *   ------------------------------------------------------------------
+ *   horas ahorradas             = lo que se libera en toda la planta
+ *
+ * Cada renglon se pasa a toneladas al ritmo de la planta ya rebalanceada:
+ * es lo que esas horas producirian si se llenaran con mas material.
  */
 function productividad(evaluacion, ev2, propuesta) {
-  const ritmo = (ev) => {
+  const totales = (ev) => {
     let kg = 0;
-    let horas = 0;
+    let produccion = 0;
+    let cambio = 0;
+    let cambios = 0;
     for (const r of ev.lineas.values()) {
       kg += r.kgProgramados;
-      horas += r.horasProduccion;
+      produccion += r.horasProduccion;
+      cambio += r.horasCambio;
+      cambios += r.cambios;
     }
-    return horas > 0 ? kg / horas : 0;
+    return { kg, produccion, cambio, cambios, ritmo: produccion > 0 ? kg / produccion : 0 };
   };
 
-  const antes = ritmo(evaluacion);
-  const despues = ritmo(ev2);
+  const a = totales(evaluacion);
+  const d = totales(ev2);
 
   // El mejor cierre posible sin cambiar una sola hora de corrida: repartir
   // las horas de hoy en partes iguales entre las lineas disponibles.
   const activas = [...evaluacion.lineas.values()].filter((r) => r.linea.activa).length;
 
+  // Toneladas equivalentes: la hora liberada vale lo que la planta produce en
+  // una hora DESPUES del rebalanceo. Se usa el ritmo nuevo y no el viejo para
+  // no inflar la cifra con un ritmo que ya no aplica.
+  const enToneladas = (horas) => (horas * d.ritmo) / 1000;
+  const horasProduccionAhorradas = a.produccion - d.produccion;
+  const horasCambioAhorradas = a.cambio - d.cambio;
+
   return {
-    ritmoActual: redondear(antes, 1),
-    ritmoPropuesto: redondear(despues, 1),
-    ritmoCambioPct: antes > 0 ? redondear((despues / antes - 1) * 100, 1) : 0,
+    ritmoActual: redondear(a.ritmo, 1),
+    ritmoPropuesto: redondear(d.ritmo, 1),
+    ritmoCambioPct: a.ritmo > 0 ? redondear((d.ritmo / a.ritmo - 1) * 100, 1) : 0,
     cierreSoloBalance: activas > 0 ? redondear(evaluacion.horasRequeridas / activas, 2) : 0,
+
+    horasProduccionActual: redondear(a.produccion, 1),
+    horasProduccionPropuesto: redondear(d.produccion, 1),
+    horasProduccionAhorradas: redondear(horasProduccionAhorradas, 1),
+    horasCambioActual: redondear(a.cambio, 1),
+    horasCambioPropuesto: redondear(d.cambio, 1),
+    horasCambioAhorradas: redondear(horasCambioAhorradas, 1),
+    horasAhorradas: redondear(horasProduccionAhorradas + horasCambioAhorradas, 1),
+    cambiosActual: a.cambios,
+    cambiosPropuesto: d.cambios,
+    cambiosEvitados: a.cambios - d.cambios,
+
+    toneladasPorRitmo: redondear(enToneladas(horasProduccionAhorradas), 1),
+    toneladasPorCambios: redondear(enToneladas(horasCambioAhorradas), 1),
+    toneladasPorTiempo: redondear(
+      enToneladas(horasProduccionAhorradas + horasCambioAhorradas),
+      1,
+    ),
   };
 }
 

@@ -51,6 +51,68 @@ function montarAnalisis(api = {}) {
     pintarAvisos(a.avisos ?? []);
   }
 
+  /**
+   * De dónde sale la productividad, en tarjetas.
+   *
+   * Las horas de una línea son horas de corrida más horas de cambio y nada
+   * más, así que el ahorro se parte en esas dos sin contar nada dos veces:
+   *
+   *   corrida ahorrada  = la misma tonelada a un ritmo mejor
+   *   cambio ahorrado   = cambios de medida evitados x el estándar
+   *   --------------------------------------------------------
+   *   horas ahorradas   = lo que se libera en toda la planta
+   *
+   * Cada renglón se traduce a tonelada al ritmo YA rebalanceado, que es lo
+   * que la planta produciría si esas horas se llenaran con más material.
+   *
+   * Ojo con confundirla con "Capacity freed up" de arriba: aquélla es hueco
+   * de calendario en las líneas que acaban antes, ésta es tiempo que deja de
+   * gastarse. No se suman.
+   */
+  function pintarGanancia() {
+    const a = paquete.analisis;
+    const caja = $('ganancia');
+    if (!caja) return;
+
+    // Los folios viejos se guardaron sin este desglose: mejor no dibujar la
+    // tarjeta que dibujarla en ceros.
+    if (a.horasAhorradas === undefined) {
+      caja.closest('.tarjeta').hidden = true;
+      return;
+    }
+    caja.closest('.tarjeta').hidden = false;
+
+    const horasAntes = a.horasProduccionActual + a.horasCambioActual;
+    const horasDespues = a.horasProduccionPropuesto + a.horasCambioPropuesto;
+    const gana = a.toneladasPorTiempo > 0.05;
+    const min = paquete.supuestos?.minutosCambio ?? 30;
+    const signo = (v, d = 1) => `${v > 0 ? '+' : ''}${num(v, d)}`;
+
+    caja.innerHTML = [
+      kpi('Hours recovered', num(a.horasAhorradas, 1), 'h',
+          `${num(horasAntes, 0)} → ${num(horasDespues, 0)} h added up over every line`,
+          gana ? 'bueno' : ''),
+      kpi('Worth in product', signo(a.toneladasPorTiempo), 't',
+          `${num(a.horasAhorradas, 1)} h × ${num(a.ritmoPropuesto, 0)} kg/h plant average`,
+          gana ? 'bueno' : ''),
+      kpi('From a faster mix', signo(a.toneladasPorRitmo), 't',
+          `${signo(a.ritmoCambioPct)}% rate · ${num(a.ritmoActual, 0)} → ${num(a.ritmoPropuesto, 0)} kg/h · ${num(a.horasProduccionAhorradas, 1)} h`,
+          ''),
+      kpi('From fewer changeovers', signo(a.toneladasPorCambios), 't',
+          `${a.cambiosEvitados} fewer size changes (${a.cambiosActual} → ${a.cambiosPropuesto}) × ${num(min, 0)} min`,
+          ''),
+    ].join('');
+
+    $('nota-ganancia').innerHTML =
+      `The last two cards add up to the second one: a line's hours are run time plus ` +
+      `changeover time and nothing else, so nothing is counted twice. ` +
+      `Tons are what those freed hours would make at the rebalanced plant rate — ` +
+      `you still need orders to fill them. ` +
+      `This is <b>not</b> the same as <b>Capacity freed up</b> above: that one is idle ` +
+      `calendar time on the lines that finish early, this one is time the plant stops ` +
+      `spending. Don't add them together.`;
+  }
+
   function kpi(etiqueta, valor, unidad, pie, clase) {
     return `<div class="kpi ${clase}">
       <div class="etiqueta">${etiqueta}</div>
@@ -508,6 +570,7 @@ function montarAnalisis(api = {}) {
       paquete = p;
       programaDesactualizado = false;
       pintarKpis();
+      pintarGanancia();
       pintarTablero();
       pintarConsejos();
       pintarTablaLineas();
