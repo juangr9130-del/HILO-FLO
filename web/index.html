@@ -19,28 +19,30 @@
   <span class="usuario" id="usuario"></span>
 </header>
 
-<nav class="tabs" id="tabs" hidden>
-  <button data-panel="programacion" aria-selected="true">Programación</button>
-  <button data-panel="analisis" aria-selected="false">Análisis</button>
-  <button data-panel="rendimiento" aria-selected="false">Rendimiento kg/h</button>
+<nav class="tabs" id="tabs">
+  <button data-panel="carga" aria-selected="true">Cargar programa</button>
+  <button data-panel="programacion" aria-selected="false" data-requiere-programa>Programación</button>
+  <button data-panel="analisis" aria-selected="false" data-requiere-programa>Análisis</button>
+  <button data-panel="rendimiento" aria-selected="false" data-requiere-programa>Rendimiento kg/h</button>
+  <button data-panel="velocidades" aria-selected="false">Velocidades</button>
 </nav>
 
 <main>
   <div class="aviso error" id="error" hidden></div>
 
   <!-- ---------- Carga ---------- -->
-  <div class="carga" id="carga">
+  <div class="carga" id="carga" data-panel="carga">
     <h2>Cargar programa de producción</h2>
     <p>El módulo lee los dos archivos tal como salen hoy de planta; no hay que
        reformatearlos.</p>
 
-    <div class="paso" id="paso-recetas">
+    <div class="paso listo" id="paso-recetas">
       <span class="indice">1</span>
       <span class="texto">
-        <strong>Parámetros de proceso</strong>
-        <span id="estado-recetas">WI-FLO-CSW-P-526 — las velocidades de receta. Se carga una vez.</span>
+        <strong>Velocidades de receta</strong>
+        <span id="estado-recetas"></span>
       </span>
-      <input type="file" id="archivo-recetas" accept=".xlsx,.xlsm">
+      <button class="secundario" id="ir-velocidades">Ver y editar</button>
     </div>
 
     <div class="paso" id="paso-schedule">
@@ -97,6 +99,34 @@
     </div>
   </section>
 
+  <!-- ---------- Velocidades ---------- -->
+  <section id="panel-velocidades" hidden>
+    <div class="aviso info">
+      Estas son las velocidades de receta del <b id="doc-catalogo"></b>, ya cargadas
+      dentro del módulo. Cambia la velocidad de cualquier diámetro y el
+      <b>rendimiento en kg/h se recalcula solo</b> — no se captura por separado,
+      sale de la velocidad y de la geometría del alambre.
+      Lo que edites queda marcado, y puedes regresar al valor del documento cuando quieras.
+    </div>
+
+    <div class="tarjeta">
+      <h2>
+        Velocidades por línea
+        <small id="resumen-ajustes"></small>
+        <span style="float:right;font-weight:400">
+          <button class="secundario" id="restablecer-todo" hidden>Regresar todo al documento</button>
+        </span>
+      </h2>
+      <div class="cuerpo" style="padding-bottom:10px">
+        <div id="selector-lineas" class="selector"></div>
+        <div id="selector-variantes" class="selector" style="margin-top:8px"></div>
+      </div>
+      <div class="cuerpo" style="padding:0">
+        <div class="scroll"><table id="tabla-velocidades"></table></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ---------- Rendimiento ---------- -->
   <section id="panel-rendimiento" hidden>
     <div class="aviso info">
@@ -116,6 +146,7 @@
   </section>
 </main>
 
+<script src="comun/pantalla-catalogo.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

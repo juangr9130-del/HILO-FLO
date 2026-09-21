@@ -44,6 +44,18 @@ usar ese mismo para que los números cuadren contra SAP.
 
 **Pregunta:** ¿con qué densidad calculan ustedes el peso del rollo?
 
+## 2b. Las velocidades se corrigen sin tocar código
+
+Las 3 282 velocidades del WI viven dentro del módulo como catálogo. Si planta
+detecta que alguna no refleja lo que la línea de verdad corre, se cambia en
+la pantalla de **Velocidades** y el rendimiento en kg/h se recalcula solo.
+
+Cada valor editado queda marcado contra el del documento, se puede regresar
+con un clic, y `vw_flo_velocidad_ajustada` lista todo lo que se apartó. Eso
+además sirve de bitácora: si al hacer el backtest (ver `VALIDACION.md`) el
+kg/h real no coincide con el calculado en una línea, ahí es donde se corrige
+y queda registro de por qué.
+
 ## 3. Rango de diámetros por línea — RESUELTO
 
 La tabla de bobinas de calentamiento y la de velocidades no coinciden en qué

@@ -11,6 +11,7 @@ const num = (v, d = 0) =>
 
 let paquete = null;
 let vista = 'actual';
+let programaDesactualizado = false;
 
 // ---------------------------------------------------------------------------
 // Arranque
@@ -22,28 +23,66 @@ async function arrancar() {
     $('usuario').textContent = estado.usuario?.demo
       ? 'modo demo'
       : (estado.usuario?.nombre ?? estado.usuario?.numeroEmpleado ?? '');
-    await revisarRecetas();
+    await catalogo.refrescar();
+    await pintarEstadoRecetas();
     await pintarHistorial();
+    actualizarTabs();
+    abrirPanel('carga');
   } catch (e) {
     mostrarError(`No se pudo contactar al módulo: ${e.message}`);
   }
 }
 
-async function revisarRecetas() {
-  const r = await fetch('/api/recetas');
-  if (!r.ok) return false;
-  const v = await r.json();
-  $('estado-recetas').textContent =
-    `${num(v.recetas)} recetas cargadas, ${v.lineas.length} líneas. Ya no hace falta volver a subirlo.`;
-  $('paso-recetas').classList.add('listo');
-  $('archivo-recetas').value = '';
-  revisarListo();
-  return true;
+function revisarListo() {
+  $('analizar').disabled = !$('archivo-schedule').files.length;
 }
 
-function revisarListo() {
-  const hayRecetas = $('paso-recetas').classList.contains('listo');
-  $('analizar').disabled = !(hayRecetas && $('archivo-schedule').files.length);
+/** El catalogo ya viene dentro del modulo: aqui solo se resume su estado. */
+async function pintarEstadoRecetas() {
+  const v = await (await fetch('/api/velocidades')).json();
+  const lineas = new Set(v.grupos.map((g) => g.linea)).size;
+  const puntos = v.grupos.reduce((t, g) => t + g.puntos.length, 0);
+  $('estado-recetas').textContent =
+    `${num(puntos)} recetas del ${v.documento}, ${lineas} líneas. Ya vienen dentro del módulo` +
+    (v.resumen.total
+      ? `, con ${v.resumen.total} ${v.resumen.total === 1 ? 'valor ajustado' : 'valores ajustados'}.`
+      : '.');
+}
+
+// La pantalla de velocidades es la misma que usa el modulo demo
+// (comun/pantalla-catalogo.js); aqui se le conecta la API.
+const catalogo = montarCatalogo({
+  datos: () => fetch('/api/velocidades').then((r) => r.json()),
+  revisar: (clave, mmS) => {
+    const v = Number(mmS);
+    if (!Number.isFinite(v)) return 'la velocidad tiene que ser un número';
+    if (v <= 0) return 'la velocidad tiene que ser mayor que cero';
+    if (v > 2000) return 'esa velocidad está fuera de rango (máximo 2000 mm/s)';
+    return null;
+  },
+  guardar: (clave, mmS) =>
+    fetch(`/api/velocidades/${encodeURIComponent(clave)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mmS }),
+    }),
+  quitar: (clave) =>
+    fetch(`/api/velocidades/${encodeURIComponent(clave)}`, { method: 'DELETE' }),
+  restablecer: () => fetch('/api/velocidades', { method: 'DELETE' }),
+  alCambiar: () => {
+    marcarProgramaDesactualizado();
+    pintarEstadoRecetas();
+  },
+});
+
+$('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
+
+/** Un folio se calculo con las velocidades de ese momento: si cambian, deja
+ *  de reflejar la realidad y hay que volver a analizar. */
+function marcarProgramaDesactualizado() {
+  if (!paquete) return;
+  programaDesactualizado = true;
+  pintarAvisos(paquete.analisis.avisos ?? []);
 }
 
 async function pintarHistorial() {
@@ -78,18 +117,6 @@ async function pintarHistorial() {
 // Carga de archivos
 // ---------------------------------------------------------------------------
 
-$('archivo-recetas').addEventListener('change', async (ev) => {
-  const archivo = ev.target.files[0];
-  if (!archivo) return;
-  $('progreso').textContent = 'Leyendo el WI…';
-  const datos = new FormData();
-  datos.append('archivo', archivo);
-  const r = await fetch('/api/recetas', { method: 'POST', body: datos });
-  $('progreso').textContent = '';
-  if (!r.ok) return mostrarError((await r.json()).error);
-  await revisarRecetas();
-});
-
 $('archivo-schedule').addEventListener('change', () => {
   $('paso-schedule').classList.toggle('listo', $('archivo-schedule').files.length > 0);
   revisarListo();
@@ -118,8 +145,7 @@ $('analizar').addEventListener('click', async () => {
 
 function mostrar(p) {
   paquete = p;
-  $('carga').hidden = true;
-  $('tabs').hidden = false;
+  programaDesactualizado = false;
   $('folio').hidden = false;
   $('folio').textContent = p.folio;
   pintarKpis();
@@ -127,6 +153,7 @@ function mostrar(p) {
   pintarConsejos();
   pintarTablaLineas();
   cargarRendimiento();
+  actualizarTabs();
   abrirPanel('programacion');
 }
 
@@ -152,9 +179,20 @@ function pintarKpis() {
 /** Los avisos del análisis, del más grave al menos grave. Cada uno trae su
  *  impacto cuantificado: un aviso sin número se ignora a la tercera vez. */
 function pintarAvisos(avisos) {
-  const caja = $('avisos');
-  if (!avisos.length) return (caja.innerHTML = '');
-  caja.innerHTML = avisos.map((av) => (av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av))).join('');
+  const desactualizado = programaDesactualizado
+    ? `<div class="aviso nota">
+         <strong>Cambiaste velocidades después de analizar el folio ${paquete.folio}.</strong>
+         Lo que ves se calculó con las anteriores. Vuelve a subir el schedule para
+         que el análisis use las nuevas.
+       </div>`
+    : '';
+  $('avisos').innerHTML =
+    desactualizado +
+    avisos
+      .map((av) =>
+        av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av),
+      )
+      .join('');
 }
 
 function pintarAvisoDevanador(av) {
@@ -382,8 +420,16 @@ function abrirPanel(nombre) {
   for (const b of $('tabs').querySelectorAll('button')) {
     b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
   }
-  for (const p of ['programacion', 'analisis', 'rendimiento']) {
+  for (const p of ['programacion', 'analisis', 'rendimiento', 'velocidades']) {
     $(`panel-${p}`).hidden = p !== nombre;
+  }
+  $('carga').hidden = nombre !== 'carga';
+}
+
+/** Las pantallas que necesitan un programa no se ofrecen hasta que haya uno. */
+function actualizarTabs() {
+  for (const b of $('tabs').querySelectorAll('button[data-requiere-programa]')) {
+    b.hidden = !paquete;
   }
 }
 

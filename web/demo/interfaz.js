@@ -9,10 +9,19 @@ const num = (v, d = 0) =>
 
 const LLAVE = 'hiloflo.demo.v1';
 
-let recetas = null; // { puntos, archivo }
 let paquete = null;
 let vista = 'actual';
 let estado = cargarEstado();
+
+// Los ajustes de velocidad viven encima de la semilla del WI. Ver
+// catalogo/velocidades-catalogo.js.
+let ajustes = new Map(Object.entries(estado.ajustes ?? {}));
+let programaDesactualizado = false;
+
+/** Los puntos que consume el motor, ya con los ajustes aplicados. */
+function recetasVigentes() {
+  return puntosDelMotor(ajustes);
+}
 
 // --- persistencia en el navegador -------------------------------------------
 // Es lo unico que reemplaza a SQL Server aqui. Puede fallar (modo incognito,
@@ -20,17 +29,19 @@ let estado = cargarEstado();
 
 function cargarEstado() {
   try {
-    return JSON.parse(localStorage.getItem(LLAVE)) ?? { consecutivo: 0, programas: [] };
+    return JSON.parse(localStorage.getItem(LLAVE)) ?? { consecutivo: 0, programas: [], ajustes: {} };
   } catch {
-    return { consecutivo: 0, programas: [] };
+    return { consecutivo: 0, programas: [], ajustes: {} };
   }
 }
 
 function guardarEstado() {
+  estado.ajustes = Object.fromEntries(ajustes);
   try {
     localStorage.setItem(LLAVE, JSON.stringify(estado));
   } catch {
-    // Cuota llena: se tiran los folios mas viejos y se reintenta una vez.
+    // Cuota llena: se tiran los folios mas viejos y se reintenta una vez. Los
+    // ajustes del catalogo NO se tiran: cuestan mas de reponer que un folio.
     estado.programas = estado.programas.slice(0, 2);
     try {
       localStorage.setItem(LLAVE, JSON.stringify(estado));
@@ -45,27 +56,9 @@ function siguienteFolio() {
   return `FLO-${new Date().getFullYear()}-${String(estado.consecutivo).padStart(4, '0')}`;
 }
 
-// --- carga de archivos -------------------------------------------------------
+// --- carga del schedule -----------------------------------------------------
 
 const leerArchivo = (archivo) => archivo.arrayBuffer();
-
-$('archivo-recetas').addEventListener('change', async (ev) => {
-  const archivo = ev.target.files[0];
-  if (!archivo) return;
-  ocultarError();
-  $('progreso').textContent = 'Leyendo el WI…';
-  try {
-    const hoja = await leerHoja(await leerArchivo(archivo), HOJA_WI);
-    recetas = { puntos: interpretarVelocidades(hoja), archivo: archivo.name };
-    estado.recetas = { archivo: archivo.name, puntos: recetas.puntos.length };
-    guardarEstado();
-    pintarEstadoRecetas();
-  } catch (e) {
-    mostrarError(`No se pudo leer el WI: ${e.message}`);
-  } finally {
-    $('progreso').textContent = '';
-  }
-});
 
 $('archivo-schedule').addEventListener('change', () => {
   $('paso-schedule').classList.toggle('listo', $('archivo-schedule').files.length > 0);
@@ -74,7 +67,7 @@ $('archivo-schedule').addEventListener('change', () => {
 
 $('analizar').addEventListener('click', async () => {
   const archivo = $('archivo-schedule').files[0];
-  if (!archivo || !recetas) return;
+  if (!archivo) return;
   ocultarError();
   $('analizar').disabled = true;
   $('progreso').textContent = 'Analizando… tarda unos segundos.';
@@ -85,7 +78,7 @@ $('analizar').addEventListener('click', async () => {
     const hoja = await leerHoja(await leerArchivo(archivo), HOJA_SCHEDULE);
     const programa = interpretarPrograma(hoja);
     const supuestos = { ...SUPUESTOS };
-    const resultado = analizar(programa, recetas.puntos, supuestos);
+    const resultado = analizar(programa, recetasVigentes(), supuestos);
 
     const nuevo = empaquetar({
       folio: siguienteFolio(),
@@ -97,6 +90,7 @@ $('analizar').addEventListener('click', async () => {
 
     estado.programas.unshift(nuevo);
     estado.programas = estado.programas.slice(0, 5);
+    programaDesactualizado = false;
     guardarEstado();
     mostrar(nuevo);
   } catch (e) {
@@ -108,17 +102,16 @@ $('analizar').addEventListener('click', async () => {
 });
 
 function pintarEstadoRecetas() {
-  if (!recetas) return;
-  const lineas = new Set(recetas.puntos.map((p) => p.linea)).size;
-  const diametros = new Set(recetas.puntos.map((p) => p.diametroMm)).size;
+  const puntos = recetasVigentes();
+  const lineas = new Set(puntos.map((p) => p.linea)).size;
+  const r = resumenAjustes(ajustes);
   $('estado-recetas').textContent =
-    `${num(recetas.puntos.length)} recetas, ${lineas} líneas, ${diametros} diámetros. Ya no hace falta volver a subirlo.`;
-  $('paso-recetas').classList.add('listo');
-  revisarListo();
+    `${num(puntos.length)} recetas del ${DOCUMENTO}, ${lineas} líneas. Ya vienen dentro del programa` +
+    (r.total ? `, con ${r.total} ${r.total === 1 ? 'valor ajustado' : 'valores ajustados'}.` : '.');
 }
 
 function revisarListo() {
-  $('analizar').disabled = !(recetas && $('archivo-schedule').files.length);
+  $('analizar').disabled = !$('archivo-schedule').files.length;
 }
 
 function pintarHistorial() {
@@ -152,8 +145,6 @@ function pintarHistorial() {
 
 function mostrar(p) {
   paquete = p;
-  $('carga').hidden = true;
-  $('tabs').hidden = false;
   $('folio').hidden = false;
   $('folio').textContent = p.folio;
   pintarKpis();
@@ -161,6 +152,7 @@ function mostrar(p) {
   pintarConsejos();
   pintarTablaLineas();
   pintarRendimiento();
+  actualizarTabs();
   abrirPanel('programacion');
 }
 
@@ -190,7 +182,14 @@ function kpi(etiqueta, valor, unidad, pie, clase) {
 }
 
 function pintarAvisos(avisos) {
-  $('avisos').innerHTML = avisos
+  const desactualizado = programaDesactualizado
+    ? `<div class="aviso nota">
+         <strong>Cambiaste velocidades después de analizar el folio ${paquete.folio}.</strong>
+         Lo que ves se calculó con las anteriores. Vuelve a subir el schedule para
+         que el análisis use las nuevas.
+       </div>`
+    : '';
+  $('avisos').innerHTML = desactualizado + avisos
     .map((av) => (av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av)))
     .join('');
 }
@@ -361,7 +360,7 @@ function pintarTablaLineas() {
 
 function pintarRendimiento() {
   const lineas = catalogoLineas(paquete.supuestos);
-  const tabla = new TablaVelocidades(recetas.puntos, lineas);
+  const tabla = new TablaVelocidades(recetasVigentes(), lineas);
   const programa = new Programa(paquete.detalleOrdenes.map((o) => new Orden(o)));
   const { lineas: claves, filas } = matrizRendimiento(tabla, programa);
 
@@ -394,6 +393,51 @@ function empatadas(fila, claves) {
   return iguales.length <= 3 ? iguales.join(', ') : `${iguales.length} líneas`;
 }
 
+
+// --- catalogo de velocidades -------------------------------------------------
+// La pantalla es la misma que usa el modulo instalado (comun/pantalla-catalogo.js);
+// aqui solo se le dice de donde salen los datos y a donde van los cambios.
+
+$('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
+
+const catalogo = montarCatalogo({
+  datos: async () => ({
+    documento: DOCUMENTO,
+    eficiencia: SUPUESTOS.eficiencia,
+    resumen: resumenAjustes(ajustes),
+    grupos: catalogoParaPantalla(ajustes, { eficiencia: SUPUESTOS.eficiencia }),
+  }),
+  revisar: (clave, mmS) => revisarAjuste(clave, mmS),
+  guardar: async (clave, mmS) => {
+    ajustes.set(clave, mmS);
+    guardarEstado();
+  },
+  quitar: async (clave) => {
+    ajustes.delete(clave);
+    guardarEstado();
+  },
+  restablecer: async () => {
+    ajustes = new Map();
+    guardarEstado();
+  },
+  alCambiar: () => {
+    marcarProgramaDesactualizado();
+    pintarEstadoRecetas();
+  },
+});
+
+function pintarCatalogo() {
+  catalogo.refrescar();
+}
+
+/** Un folio se calculo con las velocidades de ese momento: si cambian, deja
+ *  de reflejar la realidad y hay que volver a analizar. */
+function marcarProgramaDesactualizado() {
+  if (!paquete) return;
+  programaDesactualizado = true;
+  pintarAvisos(paquete.analisis.avisos ?? []);
+}
+
 // --- navegacion --------------------------------------------------------------
 
 $('tabs').addEventListener('click', (ev) => {
@@ -405,8 +449,16 @@ function abrirPanel(nombre) {
   for (const b of $('tabs').querySelectorAll('button')) {
     b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
   }
-  for (const p of ['programacion', 'analisis', 'rendimiento']) {
+  for (const p of ['programacion', 'analisis', 'rendimiento', 'velocidades']) {
     $(`panel-${p}`).hidden = p !== nombre;
+  }
+  $('carga').hidden = nombre !== 'carga';
+}
+
+/** Las pantallas que necesitan un programa no se ofrecen hasta que haya uno. */
+function actualizarTabs() {
+  for (const b of $('tabs').querySelectorAll('button[data-requiere-programa]')) {
+    b.hidden = !paquete;
   }
 }
 
@@ -430,10 +482,8 @@ function ocultarError() {
 
 // --- arranque ----------------------------------------------------------------
 
-if (estado.recetas) {
-  // El navegador recuerda que ya se cargo un WI, pero no las recetas: pesan
-  // demasiado para guardarlas. Se pide de nuevo el archivo.
-  $('estado-recetas').textContent =
-    `La última vez cargaste ${estado.recetas.archivo} (${num(estado.recetas.puntos)} recetas). Vuelve a seleccionarlo.`;
-}
+pintarEstadoRecetas();
+pintarCatalogo();
 pintarHistorial();
+actualizarTabs();
+abrirPanel('carga');

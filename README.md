@@ -28,16 +28,25 @@ más cargada. Mover trabajo a las líneas rápidas y dejar paradas a las
 lentas baja las horas totales pero no produce un kilo más. Lo que destraba
 la producción es que el material que sale de una línea lo levante otra.
 
-## Los dos archivos de planta
-
-No hay que reformatear nada; se leen tal como salen hoy.
+## Lo único que se sube es el schedule
 
 | archivo | qué aporta | cada cuándo |
 |---|---|---|
-| `WI-FLO-CSW-P-526_ITW_Process_Parameters.xlsx` | las velocidades de receta en mm/s por diámetro y línea | una vez; casi no cambia |
 | `Schedule_8200_<fecha>.xlsx` | el programa de la semana, ya asignado a work centers | cada carga |
 
-Cómo está armado cada uno y cómo se interpreta:
+Las **velocidades de receta viven dentro del módulo** como catálogo, generadas
+del WI-FLO-CSW-P-526. No hay que cargar ese Excel: en la pantalla de
+Velocidades se ve cada línea y cada diámetro, se corrige el valor que haga
+falta y **el rendimiento en kg/h se recalcula solo**. Lo que se edita queda
+marcado contra el valor del documento y se puede regresar con un clic.
+
+Para una revisión nueva del WI se regenera el catálogo:
+
+```bash
+cd server && node scripts/generar-catalogo.mjs <ruta-del-WI.xlsx>
+```
+
+Cómo está armado cada archivo y cómo se interpreta:
 [`docs/DOMINIO.md`](docs/DOMINIO.md).
 
 ## Probarlo sin instalar nada

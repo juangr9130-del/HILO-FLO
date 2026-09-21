@@ -40,6 +40,11 @@ Con eso salen las tres comparaciones que importan:
    sostiene el número de toneladas. Si el cuello de botella real de esa
    semana fue otro, el modelo está mal en lo que más importa.
 
+Cuando el kg/h real no coincida con el calculado en alguna línea, la
+corrección se captura en la pantalla de **Velocidades** y queda registrada
+contra el valor del documento. No hace falta tocar código ni volver a cargar
+el WI.
+
 **Basta una semana para saber si vamos bien o mal. Tres semanas dan la
 eficiencia con confianza.**
 
@@ -59,7 +64,8 @@ Ver [`SUPUESTOS.md`](SUPUESTOS.md). Sólo dos mueven el resultado:
 
 **Para esto no hay que esperar a TI.** `web/hiloflo-demo.html` es un solo
 archivo que se abre con doble clic: sin servidor, sin base y sin internet.
-Corre el mismo motor que el módulo instalado.
+Corre el mismo motor que el módulo instalado, y **las velocidades ya vienen
+dentro**, así que lo único que hay que tener a la mano es el schedule.
 
 Sentar al programador frente a la pantalla de Programación con un schedule
 suyo y preguntarle: **¿esto se parece a tu semana?** No a ver si le gustan

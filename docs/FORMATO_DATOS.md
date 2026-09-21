@@ -36,9 +36,23 @@ formato, esto es lo que hay que ajustar.
 - Renglones sin work center, sin descripción o sin cantidad se ignoran: así
   se saltan los subtotales y el gran total.
 
+## Catálogo de velocidades
+
+Vive en `flo_velocidad`, sembrado del catálogo que trae el módulo. Dos
+columnas por punto:
+
+- `mm_s` — el valor vigente, el que se edita.
+- `mm_s_documento` — el que dice el WI, para poder regresar.
+
+`vw_flo_velocidad_ajustada` lista de un vistazo lo que se apartó del
+documento, por cuánto, cuándo y quién.
+
+El rendimiento en kg/h **no se guarda**: lo deriva `vw_flo_rendimiento` de la
+velocidad y del diámetro. Corregir una velocidad lo recalcula solo.
+
 ## Catálogo de líneas
 
-Ya no es un CSV: vive en `cat_linea` (las 14 líneas ITW más la 15
+Vive en `cat_linea` (las 14 líneas ITW más la 15
 desactivada) y `flo_parametro_linea` (horas, eficiencia y minutos de
 cambio de cada una). Los crea `sql/00_catalogos_flo.sql` y
 `sql/01_flo.sql`.

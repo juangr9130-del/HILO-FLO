@@ -46,13 +46,35 @@ kg/h en la vista `vw_flo_rendimiento`.
 
 La razón es que **el kg/h no existe en ningún documento de Florence**: el
 WI-FLO-CSW-P-526 emite velocidad de línea en mm/s. Guardar el kg/h calculado
-lo desincronizaría en cuanto cambie la eficiencia de una línea. La vista lo
-recalcula siempre desde la geometría del alambre.
+lo desincronizaría en cuanto cambie la velocidad o la eficiencia. Se deriva
+siempre de la geometría del alambre, así que corregir una velocidad
+recalcula el rendimiento solo.
 
 Las recetas además se discriminan por devanador, grado y SLM, cosa que
 `hilo_rendimiento` no necesita — ver `docs/DOMINIO.md`.
 
-### 3. El módulo arranca sin base de datos
+### 3. El catálogo de velocidades viaja dentro del módulo
+
+`server/src/catalogo/velocidades.js` trae las 3 282 velocidades del WI, en
+17 series (ITW-2 tiene tres variantes por devanador y grado, ITW-10 dos por
+SLM). Lo genera `scripts/generar-catalogo.mjs` una vez por revisión del
+documento; no se edita a mano.
+
+Al arrancar contra SQL Server, `flo_velocidad` se siembra de ahí si está
+vacía. De ese momento en adelante **manda la base**: la siembra es
+idempotente y no pisa lo que planta haya ajustado.
+
+`flo_velocidad` guarda `mm_s` (lo vigente) y `mm_s_documento` (lo que dice el
+WI). Guardar los dos permite tres cosas que un solo valor no da: ver qué se
+apartó y por cuánto (`vw_flo_velocidad_ajustada`), regresar a lo del
+documento con un clic, y no perder las correcciones de planta cuando salga
+una revisión nueva.
+
+En el módulo demo el mismo catálogo vive dentro del HTML y los ajustes se
+guardan en el navegador, pero el modelo es idéntico: semilla fija más
+ajustes encima.
+
+### 4. El módulo arranca sin base de datos
 
 Sin `DB_SERVER`, FLO levanta con un repositorio en memoria (`modo demo`).
 Sirve para revisar la pantalla con los Excel reales sin montar SQL Server.
@@ -81,10 +103,12 @@ server/                   el proceso PM2
   src/servicio/           orquestación y el paquete que consume la pantalla
   src/db/                 SQL Server y el repositorio en memoria
   src/rutas/              la API
-  scripts/                generador del módulo demo
+  src/catalogo/           las velocidades del WI, dentro del módulo
+  scripts/                generadores del catálogo y del módulo demo
   test/                   pruebas
 
 web/                      la pantalla (HTML/CSS/JS, sin framework)
+  comun/                  lo que comparten las dos interfaces
   demo/                   plantilla e interfaz del archivo suelto
   hiloflo-demo.html       generado: no se edita a mano
 ```
@@ -109,20 +133,29 @@ El generador **se detiene** si dos módulos declaran el mismo nombre: al
 concatenar viven en el mismo ámbito y uno pisaría al otro en silencio. Ya
 pasó con `avisoSinReceta`, que existía en el dominio y en el pintado.
 
+La pantalla de Velocidades tampoco está dos veces: vive en
+`web/comun/pantalla-catalogo.js` y las dos interfaces le inyectan de dónde
+salen los datos (local en el demo, la API en el instalado). Lo único que sí
+se repite es la fórmula del kg/h, porque la interfaz del módulo instalado no
+carga el motor y necesita recalcular el renglón en cada tecla — y hay una
+prueba que truena si las dos dejan de coincidir.
+
 ## API
 
 | Método | Ruta | Qué hace |
 |---|---|---|
 | `GET` | `/api/estado` | modo de almacenamiento, sesión y supuestos vigentes |
-| `POST` | `/api/recetas` | carga el WI de parámetros; reemplaza la tabla completa |
-| `GET` | `/api/recetas` | qué recetas hay cargadas |
+| `GET` | `/api/velocidades` | el catálogo con su kg/h y qué se apartó del documento |
+| `PUT` | `/api/velocidades/:clave` | ajusta una velocidad |
+| `DELETE` | `/api/velocidades/:clave` | regresa ese punto al valor del documento |
+| `DELETE` | `/api/velocidades` | regresa todos |
 | `GET` | `/api/programas` | historial de folios |
 | `POST` | `/api/programas` | **sube el schedule, emite folio y devuelve el análisis** |
 | `GET` | `/api/programas/:folio` | vuelve a pintar un folio anterior |
 | `GET` | `/api/programas/:folio/rendimiento` | matriz kg/h por diámetro y línea |
 | `POST` | `/api/programas/:folio/movimientos/:id` | el programador marca si aceptó el consejo |
 
-Escribir (cargar recetas o un schedule) exige rol `programador`,
+Escribir (ajustar velocidades o cargar un schedule) exige rol `programador`,
 `produccion` o `administrador`. Leer lo permite además `supervisor` y
 `calidad`.
 

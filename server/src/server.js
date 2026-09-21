@@ -14,7 +14,15 @@ import { hayAutenticacion } from './auth.js';
 async function repositorio() {
   if (!hayBaseDeDatos()) return new RepositorioMemoria();
   const { conectar, RepositorioSql } = await import('./db/sqlserver.js');
-  return new RepositorioSql(await conectar());
+  const repo = new RepositorioSql(await conectar());
+  // El catalogo de velocidades viene dentro del modulo; la base lo recibe la
+  // primera vez y de ahi en adelante manda ella, con lo que planta ajuste.
+  const siembra = await repo.sembrarVelocidades();
+  if (siembra.sembrados) console.log(`[FLO] catalogo sembrado: ${siembra.sembrados} velocidades`);
+  if (siembra.sinLinea?.length) {
+    console.warn(`[FLO] AVISO: lineas del catalogo que no estan en cat_linea: ${siembra.sinLinea.join(', ')}`);
+  }
+  return repo;
 }
 
 const repo = await repositorio();

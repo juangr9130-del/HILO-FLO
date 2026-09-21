@@ -5,14 +5,15 @@ import multer from 'multer';
 
 import { config, hayBaseDeDatos } from '../config.js';
 import { exigirAcceso, exigirEscritura, hayAutenticacion } from '../auth.js';
+import { ErrorDeDatos, analizar, empaquetar, matrizRendimiento } from '../servicio/analisis.js';
+import { leerPrograma } from '../ingesta/servidor.js';
 import {
-  ErrorDeDatos,
-  analizar,
-  empaquetar,
-  matrizRendimiento,
-  puntosDesdeFilas,
-} from '../servicio/analisis.js';
-import { leerPrograma, leerVelocidades } from '../ingesta/servidor.js';
+  DOCUMENTO,
+  catalogoParaPantalla,
+  puntosDelMotor,
+  resumenAjustes,
+  revisarAjuste,
+} from '../catalogo/velocidades-catalogo.js';
 
 // Los dos Excel de planta pesan ~100 KB; 10 MB deja margen de sobra y evita
 // que una subida equivocada tumbe el proceso.
@@ -28,6 +29,7 @@ export function crearApi(repo) {
     res.json({
       modulo: config.modulo,
       almacenamiento: repo.modo,
+      documento: DOCUMENTO,
       autenticacion: hayAutenticacion(),
       baseDeDatos: hayBaseDeDatos(),
       usuario: req.usuario,
@@ -41,39 +43,56 @@ export function crearApi(repo) {
 
   api.use(exigirAcceso);
 
-  /* ---------- Recetas (el WI de parametros de proceso) ---------- */
+  /* ---------- Catalogo de velocidades ---------- */
 
-  api.post('/recetas', exigirEscritura, subida.single('archivo'), async (req, res, siguiente) => {
+  // Las velocidades vienen dentro del modulo, generadas del WI. No hay que
+  // cargar el Excel: lo que se necesita es poder corregir un valor.
+
+  api.get('/velocidades', async (req, res, siguiente) => {
     try {
-      if (!req.file) return res.status(400).json({ error: 'Falta el archivo del WI.' });
-      const puntos = await leerVelocidades(req.file.buffer);
-      const guardado = await repo.guardarVelocidades({
-        puntos,
-        documento: 'WI-FLO-CSW-P-526',
-        archivo: req.file.originalname,
-      });
+      const ajustes = await repo.leerAjustes();
       res.json({
-        recetas: puntos.length,
-        lineas: [...new Set(puntos.map((p) => p.linea))].length,
-        diametros: [...new Set(puntos.map((p) => p.diametroMm))].length,
-        cargadoEn: guardado.cargadoEn,
+        documento: DOCUMENTO,
+        eficiencia: config.eficiencia,
+        resumen: resumenAjustes(ajustes),
+        grupos: catalogoParaPantalla(ajustes, { eficiencia: config.eficiencia }),
       });
     } catch (e) {
       siguiente(e);
     }
   });
 
-  api.get('/recetas', async (req, res, siguiente) => {
+  api.put('/velocidades/:clave', exigirEscritura, async (req, res, siguiente) => {
     try {
-      const v = await repo.leerVelocidades();
-      if (!v) return res.status(404).json({ error: 'Todavia no se ha cargado el WI de recetas.' });
-      const puntos = v.puntos ?? puntosDesdeFilas(v.filas);
-      res.json({
-        recetas: puntos.length,
-        documento: v.documento ?? 'WI-FLO-CSW-P-526',
-        cargadoEn: v.cargadoEn ?? null,
-        lineas: [...new Set(puntos.map((p) => p.linea))],
-      });
+      const { clave } = req.params;
+      const motivo = revisarAjuste(clave, req.body?.mmS);
+      if (motivo) return res.status(400).json({ error: `No se guardó: ${motivo}.` });
+
+      const guardado = await repo.guardarAjuste(
+        clave,
+        Number(req.body.mmS),
+        req.usuario?.numeroEmpleado ?? null,
+      );
+      if (!guardado) return res.status(404).json({ error: 'Ese punto no está en el catálogo.' });
+      res.json(guardado);
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
+  api.delete('/velocidades/:clave', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      const quitado = await repo.quitarAjuste(req.params.clave);
+      if (!quitado) return res.status(404).json({ error: 'Ese punto no tiene ajuste.' });
+      res.json(quitado);
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
+  api.delete('/velocidades', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      res.json({ restablecidos: await repo.quitarTodosLosAjustes() });
     } catch (e) {
       siguiente(e);
     }
@@ -93,13 +112,7 @@ export function crearApi(repo) {
     try {
       if (!req.file) return res.status(400).json({ error: 'Falta el archivo del schedule.' });
 
-      const guardadas = await repo.leerVelocidades();
-      if (!guardadas) {
-        return res.status(409).json({
-          error: 'Primero hay que cargar el WI de recetas: sin velocidades no se puede calcular nada.',
-        });
-      }
-      const puntos = guardadas.puntos ?? puntosDesdeFilas(guardadas.filas);
+      const puntos = puntosDelMotor(await repo.leerAjustes());
 
       const supuestos = {
         horasDisponibles: Number(req.body.horas ?? config.horasDisponibles),
@@ -156,13 +169,11 @@ export function crearApi(repo) {
     try {
       const p = await repo.leerPrograma(req.params.folio);
       if (!p) return res.status(404).json({ error: `No existe el folio ${req.params.folio}.` });
-      const guardadas = await repo.leerVelocidades();
-      const puntos = guardadas.puntos ?? puntosDesdeFilas(guardadas.filas);
       const { catalogoLineas } = await import('../servicio/analisis.js');
       const { TablaVelocidades } = await import('../motor/rendimiento.js');
       const { Programa, Orden } = await import('../motor/modelos.js');
       const lineas = catalogoLineas(p.supuestos);
-      const tabla = new TablaVelocidades(puntos, lineas);
+      const tabla = new TablaVelocidades(puntosDelMotor(await repo.leerAjustes()), lineas);
       const programa = new Programa(p.detalleOrdenes.map((o) => new Orden(o)));
       res.json(matrizRendimiento(tabla, programa));
     } catch (e) {

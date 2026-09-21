@@ -295,3 +295,48 @@ td.mejor { background: #f2f9f5; color: var(--verde); font-weight: 600; }
 .aviso[hidden] { display: none; }
 
 .vacio { text-align: center; color: var(--texto-tenue); padding: 40px; }
+
+/* ---------- Catálogo de velocidades ---------- */
+
+.selector { display: flex; flex-wrap: wrap; gap: 6px; }
+.selector button {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 5px 11px;
+  font: inherit;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px;
+  color: var(--azul);
+  cursor: pointer;
+}
+.selector button:hover { border-color: var(--azul); }
+.selector button[aria-pressed='true'] { background: var(--azul); color: #fff; border-color: var(--azul); }
+.selector button .marca { color: var(--naranja); font-weight: 700; }
+.selector button[aria-pressed='true'] .marca { color: #ffd9bf; }
+
+input.velocidad {
+  width: 74px;
+  padding: 3px 6px;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px;
+  text-align: right;
+  background: var(--superficie);
+}
+input.velocidad:focus { outline: 2px solid var(--azul-claro); outline-offset: -1px; }
+input.velocidad.ajustada { border-color: var(--naranja); background: #fff4ec; font-weight: 600; }
+input.velocidad.invalida { border-color: var(--rojo); background: #fdf3f2; }
+
+td.original { color: var(--texto-tenue); font-size: 12px; }
+button.deshacer {
+  background: none;
+  border: none;
+  color: var(--naranja);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}

@@ -48,7 +48,21 @@ CREATE TABLE flo_parametro_linea (
 );
 GO
 
-/* La tabla "ITW Line Speed [mm/s]" del WI-FLO-CSW-P-526.
+/* El catalogo de velocidades de receta.
+
+   Se siembra al arrancar desde el catalogo que trae el propio modulo
+   (server/src/catalogo/velocidades.js, generado del WI). De ahi en adelante
+   se edita desde la pantalla de Velocidades: no hay que volver a cargar el
+   Excel para corregir un valor.
+
+   mm_s es el valor vigente y mm_s_documento el que trae el WI. Guardar los
+   dos permite ver que se aparto del documento y por cuanto, regresar a el
+   con un clic, y sobre todo no perder las correcciones de planta cuando
+   salga una revision nueva del documento.
+
+   El rendimiento en kg/h NO se guarda: sale de mm_s y de la geometria del
+   alambre (ver vw_flo_rendimiento), asi que cambiar la velocidad lo
+   recalcula solo.
 
    Es tambien la MATRIZ DE COMPATIBILIDAD: si una linea no tiene renglon para
    un diametro, no lo corre. Confirmado con Florence: una celda vacia en el
@@ -63,20 +77,36 @@ CREATE TABLE flo_velocidad (
     velocidad_id    INT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
     linea_id        SMALLINT      NOT NULL,
     diametro_mm     DECIMAL(6,2)  NOT NULL,   -- diametro de alambre estirado
-    mm_s            DECIMAL(8,2)  NOT NULL,   -- velocidad de linea de receta
+    mm_s            DECIMAL(8,2)  NOT NULL,   -- velocidad vigente
+    mm_s_documento  DECIMAL(8,2)  NOT NULL,   -- la del WI, para poder regresar
     winder          VARCHAR(10)   NULL,       -- 'NETUREN' | 'DEM' | NULL
     grado           VARCHAR(10)   NULL,       -- '9254' | '1065' | NULL
     slm             BIT           NULL,       -- NULL = aplica a ambos
     documento       VARCHAR(40)   NOT NULL DEFAULT 'WI-FLO-CSW-P-526',
     cargado_en      DATETIME2(0)  NOT NULL DEFAULT SYSDATETIME(),
+    ajustado_en     DATETIME2(0)  NULL,       -- cuando se aparto del documento
+    ajustado_por    NVARCHAR(20)  NULL,       -- numero de empleado
     CONSTRAINT FK_flo_velocidad_linea FOREIGN KEY (linea_id) REFERENCES cat_linea(linea_id),
-    CONSTRAINT CK_flo_velocidad_mm_s CHECK (mm_s > 0),
+    CONSTRAINT FK_flo_velocidad_usuario FOREIGN KEY (ajustado_por) REFERENCES cat_empleados(numero_empleado),
+    CONSTRAINT CK_flo_velocidad_mm_s CHECK (mm_s > 0 AND mm_s <= 2000),
+    CONSTRAINT CK_flo_velocidad_documento CHECK (mm_s_documento > 0),
     CONSTRAINT CK_flo_velocidad_diametro CHECK (diametro_mm > 0),
     CONSTRAINT CK_flo_velocidad_winder CHECK (winder IS NULL OR winder IN ('NETUREN', 'DEM')),
     CONSTRAINT UQ_flo_velocidad UNIQUE (linea_id, diametro_mm, winder, grado, slm)
 );
 GO
 CREATE INDEX IX_flo_velocidad_diametro ON flo_velocidad (diametro_mm, linea_id);
+GO
+
+/* Lo que se aparto del documento, para revisarlo de un vistazo. */
+CREATE VIEW vw_flo_velocidad_ajustada AS
+SELECT l.codigo AS linea, v.diametro_mm, v.winder, v.grado, v.slm,
+       v.mm_s_documento, v.mm_s,
+       CAST(v.mm_s - v.mm_s_documento AS DECIMAL(8,2)) AS diferencia,
+       v.ajustado_en, v.ajustado_por
+FROM flo_velocidad v
+JOIN cat_linea l ON l.linea_id = v.linea_id
+WHERE v.mm_s <> v.mm_s_documento;
 GO
 
 /* El rendimiento en kg/h no se almacena: se deriva. El alambre es solido y

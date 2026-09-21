@@ -7,6 +7,7 @@
 
 import sql from 'mssql';
 import { config } from '../config.js';
+import { clavePunto, semilla } from '../catalogo/velocidades-catalogo.js';
 
 let pool = null;
 
@@ -56,51 +57,113 @@ export class RepositorioSql {
     return `FLO-${anio}-${String(siguiente).padStart(4, '0')}`;
   }
 
-  /** Reemplaza la tabla de recetas completa: el WI se carga entero, no por partes. */
-  async guardarVelocidades({ puntos, documento, archivo }) {
+  /**
+   * Siembra flo_velocidad con el catalogo que trae el modulo, si esta vacia.
+   *
+   * Se corre al arrancar. Idempotente: si ya hay renglones no toca nada, para
+   * no pisar lo que planta haya ajustado.
+   */
+  async sembrarVelocidades() {
     const lineas = await this.lineaId();
-    const tx = new sql.Transaction(this.pool);
-    await tx.begin();
-    try {
-      await new sql.Request(tx).query('DELETE FROM flo_velocidad');
-      const tabla = new sql.Table('flo_velocidad');
-      tabla.columns.add('linea_id', sql.SmallInt, { nullable: false });
-      tabla.columns.add('diametro_mm', sql.Decimal(6, 2), { nullable: false });
-      tabla.columns.add('mm_s', sql.Decimal(8, 2), { nullable: false });
-      tabla.columns.add('winder', sql.VarChar(10), { nullable: true });
-      tabla.columns.add('grado', sql.VarChar(10), { nullable: true });
-      tabla.columns.add('slm', sql.Bit, { nullable: true });
-      tabla.columns.add('documento', sql.VarChar(40), { nullable: false });
-      for (const p of puntos) {
-        const id = lineas.get(p.linea);
-        if (!id) continue; // linea que no esta en cat_linea: se ignora y se reporta arriba
-        tabla.rows.add(id, p.diametroMm, p.mmS, p.winder, p.grado, p.slm, documento);
+    const hay = await this.pool.request().query('SELECT COUNT(*) AS n FROM flo_velocidad');
+    if (hay.recordset[0].n > 0) return { sembrados: 0, existentes: hay.recordset[0].n };
+
+    const tabla = new sql.Table('flo_velocidad');
+    tabla.columns.add('linea_id', sql.SmallInt, { nullable: false });
+    tabla.columns.add('diametro_mm', sql.Decimal(6, 2), { nullable: false });
+    tabla.columns.add('mm_s', sql.Decimal(8, 2), { nullable: false });
+    tabla.columns.add('mm_s_documento', sql.Decimal(8, 2), { nullable: false });
+    tabla.columns.add('winder', sql.VarChar(10), { nullable: true });
+    tabla.columns.add('grado', sql.VarChar(10), { nullable: true });
+    tabla.columns.add('slm', sql.Bit, { nullable: true });
+
+    const sinLinea = new Set();
+    for (const p of semilla()) {
+      const id = lineas.get(p.linea);
+      if (!id) {
+        sinLinea.add(p.linea);
+        continue;
       }
-      await new sql.Request(tx).bulk(tabla);
-      await tx.commit();
-      return { puntos: puntos.length, documento, archivo, cargadoEn: new Date().toISOString() };
-    } catch (e) {
-      await tx.rollback();
-      throw e;
+      tabla.rows.add(id, p.diametroMm, p.mmS, p.mmS, p.winder, p.grado, p.slm);
     }
+    await this.pool.request().bulk(tabla);
+    return { sembrados: tabla.rows.length, sinLinea: [...sinLinea] };
   }
 
-  async leerVelocidades() {
+  /** clave de punto -> mm/s, solo de lo que se aparto del documento. */
+  async leerAjustes() {
     const r = await this.pool.request().query(
       `SELECT l.codigo AS linea, v.diametro_mm, v.mm_s, v.winder, v.grado, v.slm
-         FROM flo_velocidad v JOIN cat_linea l ON l.linea_id = v.linea_id`,
+         FROM flo_velocidad v JOIN cat_linea l ON l.linea_id = v.linea_id
+        WHERE v.mm_s <> v.mm_s_documento`,
     );
-    if (!r.recordset.length) return null;
-    return {
-      filas: r.recordset.map((f) => ({
-        linea: f.linea,
-        diametroMm: Number(f.diametro_mm),
-        mmS: Number(f.mm_s),
-        winder: f.winder,
-        grado: f.grado,
-        slm: f.slm === null ? null : Boolean(f.slm),
-      })),
-    };
+    return new Map(
+      r.recordset.map((f) => [
+        clavePunto({
+          linea: f.linea,
+          winder: f.winder,
+          grado: f.grado,
+          slm: f.slm === null ? null : Boolean(f.slm),
+          diametroMm: Number(f.diametro_mm),
+        }),
+        Number(f.mm_s),
+      ]),
+    );
+  }
+
+  async guardarAjuste(clave, mmS, empleado = null) {
+    const p = desarmarClave(clave);
+    const r = await this.pool
+      .request()
+      .input('linea', sql.VarChar(10), p.linea)
+      .input('diametro', sql.Decimal(6, 2), p.diametroMm)
+      .input('winder', sql.VarChar(10), p.winder)
+      .input('grado', sql.VarChar(10), p.grado)
+      .input('slm', sql.Bit, p.slm)
+      .input('mm_s', sql.Decimal(8, 2), mmS)
+      .input('empleado', sql.NVarChar(20), empleado)
+      .query(
+        `UPDATE v SET mm_s = @mm_s,
+                      ajustado_en = SYSDATETIME(),
+                      ajustado_por = @empleado
+           OUTPUT INSERTED.velocidad_id
+           FROM flo_velocidad v JOIN cat_linea l ON l.linea_id = v.linea_id
+          WHERE l.codigo = @linea AND v.diametro_mm = @diametro
+            AND ISNULL(v.winder, '') = ISNULL(@winder, '')
+            AND ISNULL(v.grado, '') = ISNULL(@grado, '')
+            AND ((v.slm IS NULL AND @slm IS NULL) OR v.slm = @slm)`,
+      );
+    return r.recordset[0] ? { clave, mmS } : null;
+  }
+
+  /** Regresar un punto al valor del documento es volver mm_s a mm_s_documento. */
+  async quitarAjuste(clave) {
+    const p = desarmarClave(clave);
+    const r = await this.pool
+      .request()
+      .input('linea', sql.VarChar(10), p.linea)
+      .input('diametro', sql.Decimal(6, 2), p.diametroMm)
+      .input('winder', sql.VarChar(10), p.winder)
+      .input('grado', sql.VarChar(10), p.grado)
+      .input('slm', sql.Bit, p.slm)
+      .query(
+        `UPDATE v SET mm_s = v.mm_s_documento, ajustado_en = NULL, ajustado_por = NULL
+           OUTPUT INSERTED.velocidad_id
+           FROM flo_velocidad v JOIN cat_linea l ON l.linea_id = v.linea_id
+          WHERE l.codigo = @linea AND v.diametro_mm = @diametro
+            AND ISNULL(v.winder, '') = ISNULL(@winder, '')
+            AND ISNULL(v.grado, '') = ISNULL(@grado, '')
+            AND ((v.slm IS NULL AND @slm IS NULL) OR v.slm = @slm)`,
+      );
+    return r.recordset[0] ? { clave } : null;
+  }
+
+  async quitarTodosLosAjustes() {
+    const r = await this.pool.request().query(
+      `UPDATE flo_velocidad SET mm_s = mm_s_documento, ajustado_en = NULL, ajustado_por = NULL
+        WHERE mm_s <> mm_s_documento`,
+    );
+    return r.rowsAffected[0] ?? 0;
   }
 
   /** Guarda programa + ordenes + analisis + movimientos en una sola transaccion. */
@@ -305,4 +368,16 @@ export class RepositorioSql {
     const fila = r.recordset[0];
     return fila ? { id: fila.orden_sugerencia, aceptado: Boolean(fila.aceptado) } : null;
   }
+}
+
+/** El inverso de clavePunto, para poder ubicar el renglon en la tabla. */
+function desarmarClave(clave) {
+  const [linea, winder, grado, slm, diametro] = String(clave).split('|');
+  return {
+    linea,
+    winder: winder || null,
+    grado: grado || null,
+    slm: slm === '' ? null : slm === 'true',
+    diametroMm: Number(diametro),
+  };
 }

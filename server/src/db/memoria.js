@@ -9,7 +9,7 @@
 export class RepositorioMemoria {
   constructor() {
     this.programas = new Map(); // folio -> registro
-    this.velocidades = null; // { puntos, documento, cargadoEn }
+    this.ajustes = new Map(); // clave de punto -> mm/s
     this.consecutivo = 0;
     this.modo = 'memoria';
   }
@@ -19,13 +19,24 @@ export class RepositorioMemoria {
     return `FLO-${anio}-${String(this.consecutivo).padStart(4, '0')}`;
   }
 
-  async guardarVelocidades({ puntos, documento, archivo }) {
-    this.velocidades = { puntos, documento, archivo, cargadoEn: new Date().toISOString() };
-    return this.velocidades;
+  /** Los ajustes de velocidad encima de la semilla que trae el modulo. */
+  async leerAjustes() {
+    return this.ajustes;
   }
 
-  async leerVelocidades() {
-    return this.velocidades;
+  async guardarAjuste(clave, mmS) {
+    this.ajustes.set(clave, mmS);
+    return { clave, mmS };
+  }
+
+  async quitarAjuste(clave) {
+    return this.ajustes.delete(clave) ? { clave } : null;
+  }
+
+  async quitarTodosLosAjustes() {
+    const n = this.ajustes.size;
+    this.ajustes.clear();
+    return n;
   }
 
   async guardarPrograma(registro) {

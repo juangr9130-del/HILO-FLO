@@ -13,14 +13,9 @@ import { join } from 'node:path';
 
 import { crearApp } from '../src/app.js';
 import { RepositorioMemoria } from '../src/db/memoria.js';
-import { crearSchedule, crearWi } from './fixtures.js';
+import { crearSchedule } from './fixtures.js';
 
-const WI = {
-  // ITW-2 tabulada por devanador; el resto simples
-  7.0: { 3: 275, 4: 600, 8: 250, 9: 250 },
-  14.7: { 8: 170, 9: 200, 15: 180 },
-};
-
+// Diametros que el catalogo del WI si cubre, para que el analisis sea real.
 const RENGLONES = [
   ['BB001', '14703', 'CSW,14.70mm HT 1950-2000 MPa', null, '600001', 2300],
   ['BB001', '14703', 'CSW,14.70mm HT 1950-2000 MPa', null, '600002', 2300],
@@ -36,9 +31,8 @@ async function levantar(t) {
   t.after(() => servidor.close());
   const base = `http://127.0.0.1:${servidor.address().port}`;
 
-  const wi = await crearWi(join(dir, 'wi.xlsx'), WI);
   const schedule = await crearSchedule(join(dir, 's.xlsx'), RENGLONES);
-  return { base, dir, wi, schedule, repo };
+  return { base, dir, schedule, repo };
 }
 
 async function subir(base, ruta, archivo, nombre) {
@@ -55,18 +49,93 @@ test('el estado dice en que modo corre', async (t) => {
   assert.equal(r.baseDeDatos, false);
 });
 
-test('sin recetas cargadas no deja subir un schedule', async (t) => {
+test('el catalogo de velocidades ya viene dentro del modulo', async (t) => {
+  const { base } = await levantar(t);
+  const v = await (await fetch(`${base}/api/velocidades`)).json();
+  assert.equal(v.documento, 'WI-FLO-CSW-P-526');
+  assert.equal(v.resumen.total, 0, 'arranca sin ajustes');
+  assert.ok(v.grupos.length >= 14);
+});
+
+test('se puede ajustar una velocidad y el kg/h se recalcula', async (t) => {
+  const { base } = await levantar(t);
+  const v = await (await fetch(`${base}/api/velocidades`)).json();
+  const grupo = v.grupos.find((g) => g.linea === 'ITW-1');
+  const punto = grupo.puntos[0];
+
+  const r = await fetch(`${base}/api/velocidades/${encodeURIComponent(punto.clave)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mmS: punto.mmS * 2 }),
+  });
+  assert.equal(r.status, 200);
+
+  const despues = await (await fetch(`${base}/api/velocidades`)).json();
+  const ahora = despues.grupos
+    .find((g) => g.clave === grupo.clave)
+    .puntos.find((p) => p.clave === punto.clave);
+
+  assert.equal(ahora.mmS, punto.mmS * 2);
+  assert.equal(ahora.mmSOriginal, punto.mmS);
+  assert.equal(ahora.ajustado, true);
+  assert.ok(Math.abs(ahora.kgHora - punto.kgHora * 2) < 0.2, 'el rendimiento va con la velocidad');
+  assert.equal(despues.resumen.total, 1);
+});
+
+test('una velocidad imposible se rechaza con 400', async (t) => {
+  const { base } = await levantar(t);
+  const v = await (await fetch(`${base}/api/velocidades`)).json();
+  const clave = v.grupos[0].puntos[0].clave;
+  for (const mmS of [0, -1, 9999, 'abc']) {
+    const r = await fetch(`${base}/api/velocidades/${encodeURIComponent(clave)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mmS }),
+    });
+    assert.equal(r.status, 400, `mmS=${mmS} deberia rechazarse`);
+  }
+});
+
+test('se puede regresar un punto al valor del documento', async (t) => {
+  const { base } = await levantar(t);
+  const v = await (await fetch(`${base}/api/velocidades`)).json();
+  const punto = v.grupos[0].puntos[0];
+  const url = `${base}/api/velocidades/${encodeURIComponent(punto.clave)}`;
+
+  await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mmS: punto.mmS + 7 }),
+  });
+  assert.equal((await fetch(url, { method: 'DELETE' })).status, 200);
+
+  const despues = await (await fetch(`${base}/api/velocidades`)).json();
+  assert.equal(despues.resumen.total, 0);
+});
+
+test('el ajuste cambia el analisis', async (t) => {
   const { base, schedule } = await levantar(t);
-  const r = await subir(base, '/api/programas', schedule, 's.xlsx');
-  assert.equal(r.status, 409);
-  assert.match((await r.json()).error, /recetas/);
+  const antes = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+
+  // ITW-1 corre las tres ordenes de la prueba: al doble de velocidad, cierra antes.
+  const v = await (await fetch(`${base}/api/velocidades`)).json();
+  for (const p of v.grupos.find((g) => g.linea === 'ITW-1').puntos) {
+    await fetch(`${base}/api/velocidades/${encodeURIComponent(p.clave)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mmS: p.mmS * 2 }),
+    });
+  }
+
+  const despues = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
+  assert.ok(
+    despues.analisis.makespanActual < antes.analisis.makespanActual,
+    'duplicar la velocidad de ITW-1 tiene que bajar el cierre',
+  );
 });
 
 test('flujo completo: recetas, schedule, folio y analisis', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-
-  const recetas = await (await subir(base, '/api/recetas', wi, 'wi.xlsx')).json();
-  assert.ok(recetas.recetas > 0);
+  const { base, schedule } = await levantar(t);
 
   const r = await subir(base, '/api/programas', schedule, 's.xlsx');
   assert.equal(r.status, 201);
@@ -83,8 +152,7 @@ test('flujo completo: recetas, schedule, folio y analisis', async (t) => {
 });
 
 test('el folio es consecutivo y no se repite', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-  await subir(base, '/api/recetas', wi, 'wi.xlsx');
+  const { base, schedule } = await levantar(t);
   const a = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
   const b = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
   assert.notEqual(a.folio, b.folio);
@@ -92,8 +160,7 @@ test('el folio es consecutivo y no se repite', async (t) => {
 });
 
 test('un folio se vuelve a leer igual a como se emitio', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-  await subir(base, '/api/recetas', wi, 'wi.xlsx');
+  const { base, schedule } = await levantar(t);
   const emitido = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
 
   const releido = await (await fetch(`${base}/api/programas/${emitido.folio}`)).json();
@@ -109,8 +176,7 @@ test('un folio que no existe responde 404', async (t) => {
 });
 
 test('la matriz de rendimiento trae una fila por diametro del programa', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-  await subir(base, '/api/recetas', wi, 'wi.xlsx');
+  const { base, schedule } = await levantar(t);
   const p = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
 
   const m = await (await fetch(`${base}/api/programas/${p.folio}/rendimiento`)).json();
@@ -120,8 +186,7 @@ test('la matriz de rendimiento trae una fila por diametro del programa', async (
 });
 
 test('el programador puede marcar si acepto un consejo', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-  await subir(base, '/api/recetas', wi, 'wi.xlsx');
+  const { base, schedule } = await levantar(t);
   const p = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
   if (!p.analisis.movimientos.length) return; // este escenario chico puede no tener consejos
 
@@ -138,8 +203,7 @@ test('el programador puede marcar si acepto un consejo', async (t) => {
 });
 
 test('marcar un consejo que no existe responde 404', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-  await subir(base, '/api/recetas', wi, 'wi.xlsx');
+  const { base, schedule } = await levantar(t);
   const p = await (await subir(base, '/api/programas', schedule, 's.xlsx')).json();
   const r = await fetch(`${base}/api/programas/${p.folio}/movimientos/999`, {
     method: 'POST',
@@ -150,10 +214,10 @@ test('marcar un consejo que no existe responde 404', async (t) => {
 });
 
 test('un archivo que no es el esperado responde 400, no 500', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-  await subir(base, '/api/recetas', wi, 'wi.xlsx');
-  // El WI en el lugar del schedule: es un .xlsx valido pero sin ordenes.
-  const r = await subir(base, '/api/programas', wi, 'wi.xlsx');
+  const { base, dir } = await levantar(t);
+  // Un .xlsx valido pero sin ninguna orden dentro.
+  const vacio = await crearSchedule(join(dir, 'vacio.xlsx'), []);
+  const r = await subir(base, '/api/programas', vacio, 'vacio.xlsx');
   assert.equal(r.status, 400);
   assert.ok((await r.json()).error);
 });
@@ -165,8 +229,7 @@ test('subir sin archivo responde 400', async (t) => {
 });
 
 test('el historial lista los folios emitidos, del mas nuevo al mas viejo', async (t) => {
-  const { base, wi, schedule } = await levantar(t);
-  await subir(base, '/api/recetas', wi, 'wi.xlsx');
+  const { base, schedule } = await levantar(t);
   await subir(base, '/api/programas', schedule, 's.xlsx');
   await subir(base, '/api/programas', schedule, 's.xlsx');
 
