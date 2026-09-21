@@ -9,10 +9,10 @@ import {
   ErrorDeDatos,
   analizar,
   empaquetar,
-  leerVelocidades,
   matrizRendimiento,
   puntosDesdeFilas,
 } from '../servicio/analisis.js';
+import { leerPrograma, leerVelocidades } from '../ingesta/servidor.js';
 
 // Los dos Excel de planta pesan ~100 KB; 10 MB deja margen de sobra y evita
 // que una subida equivocada tumbe el proceso.
@@ -108,7 +108,8 @@ export function crearApi(repo) {
         itw15Activa: req.body.itw15 === 'true',
       };
 
-      const resultado = await analizar(req.file.buffer, puntos, supuestos);
+      const programa = await leerPrograma(req.file.buffer);
+      const resultado = analizar(programa, puntos, supuestos);
       const folio = await repo.siguienteFolio();
       const paquete = empaquetar({
         folio,

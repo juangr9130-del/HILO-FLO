@@ -67,6 +67,10 @@ header .usuario { font-size: 13px; opacity: 0.85; }
 
 /* ---------- Tabs ---------- */
 
+/* El atributo hidden lo pisa cualquier regla de display del autor, asi que
+   hay que declararlo aparte para cada elemento que lo use. */
+nav.tabs[hidden] { display: none; }
+
 nav.tabs {
   background: var(--superficie);
   border-bottom: 1px solid var(--borde);

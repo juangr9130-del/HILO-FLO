@@ -18,20 +18,16 @@
  * con formulas rotas (#REF!) y la asignacion completa ya esta en Sheet1.
  */
 
-import ExcelJS from 'exceljs';
-import { Orden, Programa, workCenterALinea } from '../motor/modelos.js';
-import { numero, texto, valorCelda } from './comun.js';
+import { DIAMETRO_MAX, DIAMETRO_MIN, Orden, Programa, workCenterALinea } from '../motor/modelos.js';
+import { numero, texto } from './comun.js';
+import { celda, numerosDeFila } from './hoja.js';
 
-export const HOJA_PREDETERMINADA = 'Sheet1';
+export const HOJA_SCHEDULE = 'Sheet1';
 export const FILA_ENCABEZADOS = 2;
 
 /** Diametro dentro de la descripcion: 1 o 2 enteros y 1 o 2 decimales. */
 const RE_DIAMETRO = /(\d{1,2}[.,]\d{1,2})\s*(?:mm)?/gi;
 
-/** Rango plausible de diametro de alambre estirado (mm). Descarta falsos
- *  positivos como el rango de resistencia "1950-2000 MPa". */
-export const DIAMETRO_MIN = 4;
-export const DIAMETRO_MAX = 30;
 
 /** encabezado normalizado -> campo */
 const ALIAS = new Map([
@@ -45,6 +41,10 @@ const ALIAS = new Map([
 ]);
 
 const OBLIGATORIAS = ['workCenter', 'descripcion', 'cantidad'];
+
+// --------------------------------------------------------------------------
+// Interpretacion de la descripcion del material
+// --------------------------------------------------------------------------
 
 /** Primer numero de la descripcion que sea un diametro plausible. */
 export function diametroDe(descripcion) {
@@ -82,13 +82,16 @@ export function winderDe(txt) {
   return null;
 }
 
-function mapearColumnas(ws) {
+// --------------------------------------------------------------------------
+// Lectura
+// --------------------------------------------------------------------------
+
+function mapearColumnas(filas) {
   const columnas = new Map();
-  const fila = ws.getRow(FILA_ENCABEZADOS);
-  fila.eachCell({ includeEmpty: false }, (celda, col) => {
-    const encabezado = texto(valorCelda(celda)).toLowerCase();
-    if (ALIAS.has(encabezado)) columnas.set(ALIAS.get(encabezado), col);
-  });
+  for (const [numeroColumna, valor] of filas.get(FILA_ENCABEZADOS) ?? new Map()) {
+    const encabezado = texto(valor).toLowerCase();
+    if (ALIAS.has(encabezado)) columnas.set(ALIAS.get(encabezado), numeroColumna);
+  }
   const faltantes = OBLIGATORIAS.filter((c) => !columnas.has(c));
   if (faltantes.length) {
     throw new Error(`al schedule le faltan columnas obligatorias: ${faltantes.join(', ')}`);
@@ -96,29 +99,26 @@ function mapearColumnas(ws) {
   return columnas;
 }
 
-/** Lee el schedule y devuelve el programa con sus ordenes. */
-export async function leerPrograma(rutaOBuffer, { hoja = null, horizonte = '' } = {}) {
-  const wb = new ExcelJS.Workbook();
-  if (Buffer.isBuffer(rutaOBuffer)) await wb.xlsx.load(rutaOBuffer);
-  else await wb.xlsx.readFile(rutaOBuffer);
-
-  const ws = hoja
-    ? wb.getWorksheet(hoja)
-    : (wb.getWorksheet(HOJA_PREDETERMINADA) ?? wb.worksheets[0]);
-  if (!ws) throw new Error('el schedule no tiene ninguna hoja legible');
-
-  const columnas = mapearColumnas(ws);
-  const leer = (fila, campo) =>
-    columnas.has(campo) ? valorCelda(fila.getCell(columnas.get(campo))) : null;
+/**
+ * Interpreta una hoja ya leida.
+ *
+ * Es puro: no sabe de archivos ni de exceljs, asi que corre igual en el
+ * servidor y en el navegador. Ver ingesta/hoja.js.
+ */
+export function interpretarPrograma({ filas }, horizonte = '') {
+  const columnas = mapearColumnas(filas);
+  const leer = (numeroFila, campo) =>
+    columnas.has(campo) ? celda(filas, numeroFila, columnas.get(campo)) : null;
 
   const ordenes = [];
   const secuencias = new Map();
 
-  for (let n = FILA_ENCABEZADOS + 1; n <= ws.rowCount; n++) {
-    const fila = ws.getRow(n);
-    const workCenter = texto(leer(fila, 'workCenter'));
-    const descripcion = texto(leer(fila, 'descripcion'));
-    const cantidad = numero(leer(fila, 'cantidad'));
+  for (const numeroFila of numerosDeFila(filas)) {
+    if (numeroFila <= FILA_ENCABEZADOS) continue;
+
+    const workCenter = texto(leer(numeroFila, 'workCenter'));
+    const descripcion = texto(leer(numeroFila, 'descripcion'));
+    const cantidad = numero(leer(numeroFila, 'cantidad'));
 
     // Renglones de subtotal y gran total.
     if (!workCenter || !descripcion || !cantidad || cantidad <= 0) continue;
@@ -129,22 +129,22 @@ export async function leerPrograma(rutaOBuffer, { hoja = null, horizonte = '' } 
     const linea = workCenterALinea(workCenter);
     const secuencia = (secuencias.get(linea) ?? 0) + 1;
     secuencias.set(linea, secuencia);
-    const notas = texto(leer(fila, 'notas'));
+    const notas = texto(leer(numeroFila, 'notas'));
 
     ordenes.push(
       new Orden({
-        id: texto(leer(fila, 'orden')) || `${linea}-${String(secuencia).padStart(3, '0')}`,
+        id: texto(leer(numeroFila, 'orden')) || `${linea}-${String(secuencia).padStart(3, '0')}`,
         diametroMm,
         kilogramos: cantidad,
         linea,
-        material: texto(leer(fila, 'material')),
+        material: texto(leer(numeroFila, 'material')),
         descripcion,
         grupoGrado: gradoDe(descripcion),
         slm: esSlm(descripcion),
         winder: winderDe(`${descripcion} ${notas}`),
         secuencia,
         notas,
-        clientePo: texto(leer(fila, 'clientePo')),
+        clientePo: texto(leer(numeroFila, 'clientePo')),
       }),
     );
   }

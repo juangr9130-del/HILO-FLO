@@ -1,93 +1,70 @@
-/**
- * Pantalla de HILO-FLO.
- *
- * No calcula nada: el backend manda el paquete ya resuelto y aqui solo se
- * dibuja. Asi el mismo folio se vuelve a pintar identico meses despues.
- */
+// ===== interfaz del demo ======================================================
+//
+// Lo mismo que hace web/app.js, pero sin servidor: el analisis corre aqui
+// mismo con el motor inlineado arriba.
 
 const $ = (id) => document.getElementById(id);
 const num = (v, d = 0) =>
   (v ?? 0).toLocaleString('es-MX', { minimumFractionDigits: d, maximumFractionDigits: d });
 
+const LLAVE = 'hiloflo.demo.v1';
+
+let recetas = null; // { puntos, archivo }
 let paquete = null;
 let vista = 'actual';
+let estado = cargarEstado();
 
-// ---------------------------------------------------------------------------
-// Arranque
-// ---------------------------------------------------------------------------
+// --- persistencia en el navegador -------------------------------------------
+// Es lo unico que reemplaza a SQL Server aqui. Puede fallar (modo incognito,
+// cuota llena), y si falla el demo sigue funcionando en memoria.
 
-async function arrancar() {
+function cargarEstado() {
   try {
-    const estado = await (await fetch('/api/estado')).json();
-    $('usuario').textContent = estado.usuario?.demo
-      ? 'modo demo'
-      : (estado.usuario?.nombre ?? estado.usuario?.numeroEmpleado ?? '');
-    await revisarRecetas();
-    await pintarHistorial();
-  } catch (e) {
-    mostrarError(`No se pudo contactar al módulo: ${e.message}`);
+    return JSON.parse(localStorage.getItem(LLAVE)) ?? { consecutivo: 0, programas: [] };
+  } catch {
+    return { consecutivo: 0, programas: [] };
   }
 }
 
-async function revisarRecetas() {
-  const r = await fetch('/api/recetas');
-  if (!r.ok) return false;
-  const v = await r.json();
-  $('estado-recetas').textContent =
-    `${num(v.recetas)} recetas cargadas, ${v.lineas.length} líneas. Ya no hace falta volver a subirlo.`;
-  $('paso-recetas').classList.add('listo');
-  $('archivo-recetas').value = '';
-  revisarListo();
-  return true;
+function guardarEstado() {
+  try {
+    localStorage.setItem(LLAVE, JSON.stringify(estado));
+  } catch {
+    // Cuota llena: se tiran los folios mas viejos y se reintenta una vez.
+    estado.programas = estado.programas.slice(0, 2);
+    try {
+      localStorage.setItem(LLAVE, JSON.stringify(estado));
+    } catch {
+      /* el demo sigue con lo que trae en memoria */
+    }
+  }
 }
 
-function revisarListo() {
-  const hayRecetas = $('paso-recetas').classList.contains('listo');
-  $('analizar').disabled = !(hayRecetas && $('archivo-schedule').files.length);
+function siguienteFolio() {
+  estado.consecutivo += 1;
+  return `FLO-${new Date().getFullYear()}-${String(estado.consecutivo).padStart(4, '0')}`;
 }
 
-async function pintarHistorial() {
-  const lista = await (await fetch('/api/programas')).json();
-  if (!lista.length) return ($('historial').innerHTML = '');
-  $('historial').innerHTML = `
-    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Programas anteriores</h3>
-    <table>
-      <tr><th>Folio</th><th>Archivo</th><th>Órdenes</th><th>Toneladas</th><th>Oportunidad</th></tr>
-      ${lista
-        .map(
-          (p) => `<tr>
-            <td><a href="#" data-folio="${p.folio}">${p.folio}</a></td>
-            <td style="text-align:left;color:var(--texto-tenue)">${p.archivo ?? ''}</td>
-            <td class="num">${num(p.ordenes)}</td>
-            <td class="num">${num((p.kilogramos ?? 0) / 1000, 1)}</td>
-            <td class="num" style="color:var(--verde)">+${num(p.toneladasIncremento, 1)} t</td>
-          </tr>`,
-        )
-        .join('')}
-    </table>`;
-  $('historial').querySelectorAll('a[data-folio]').forEach((a) =>
-    a.addEventListener('click', async (ev) => {
-      ev.preventDefault();
-      const r = await fetch(`/api/programas/${a.dataset.folio}`);
-      if (r.ok) mostrar(await r.json());
-    }),
-  );
-}
+// --- carga de archivos -------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Carga de archivos
-// ---------------------------------------------------------------------------
+const leerArchivo = (archivo) => archivo.arrayBuffer();
 
 $('archivo-recetas').addEventListener('change', async (ev) => {
   const archivo = ev.target.files[0];
   if (!archivo) return;
+  ocultarError();
   $('progreso').textContent = 'Leyendo el WI…';
-  const datos = new FormData();
-  datos.append('archivo', archivo);
-  const r = await fetch('/api/recetas', { method: 'POST', body: datos });
-  $('progreso').textContent = '';
-  if (!r.ok) return mostrarError((await r.json()).error);
-  await revisarRecetas();
+  try {
+    const hoja = await leerHoja(await leerArchivo(archivo), HOJA_WI);
+    recetas = { puntos: interpretarVelocidades(hoja), archivo: archivo.name };
+    estado.recetas = { archivo: archivo.name, puntos: recetas.puntos.length };
+    guardarEstado();
+    pintarEstadoRecetas();
+  } catch (e) {
+    mostrarError(`No se pudo leer el WI: ${e.message}`);
+  } finally {
+    $('progreso').textContent = '';
+  }
 });
 
 $('archivo-schedule').addEventListener('change', () => {
@@ -97,24 +74,81 @@ $('archivo-schedule').addEventListener('change', () => {
 
 $('analizar').addEventListener('click', async () => {
   const archivo = $('archivo-schedule').files[0];
-  if (!archivo) return;
-  $('analizar').disabled = true;
-  $('progreso').textContent = 'Analizando… esto tarda unos segundos.';
+  if (!archivo || !recetas) return;
   ocultarError();
+  $('analizar').disabled = true;
+  $('progreso').textContent = 'Analizando… tarda unos segundos.';
+  // Un respiro para que el navegador pinte el mensaje antes de bloquearse.
+  await new Promise((r) => setTimeout(r, 30));
 
-  const datos = new FormData();
-  datos.append('archivo', archivo);
-  const r = await fetch('/api/programas', { method: 'POST', body: datos });
-  $('progreso').textContent = '';
-  $('analizar').disabled = false;
+  try {
+    const hoja = await leerHoja(await leerArchivo(archivo), HOJA_SCHEDULE);
+    const programa = interpretarPrograma(hoja);
+    const supuestos = { ...SUPUESTOS };
+    const resultado = analizar(programa, recetas.puntos, supuestos);
 
-  if (!r.ok) return mostrarError((await r.json()).error);
-  mostrar(await r.json());
+    const nuevo = empaquetar({
+      folio: siguienteFolio(),
+      archivo: archivo.name,
+      cargadoPor: null,
+      supuestos,
+      ...resultado,
+    });
+
+    estado.programas.unshift(nuevo);
+    estado.programas = estado.programas.slice(0, 5);
+    guardarEstado();
+    mostrar(nuevo);
+  } catch (e) {
+    mostrarError(e.message);
+  } finally {
+    $('analizar').disabled = false;
+    $('progreso').textContent = '';
+  }
 });
 
-// ---------------------------------------------------------------------------
-// Pintado
-// ---------------------------------------------------------------------------
+function pintarEstadoRecetas() {
+  if (!recetas) return;
+  const lineas = new Set(recetas.puntos.map((p) => p.linea)).size;
+  const diametros = new Set(recetas.puntos.map((p) => p.diametroMm)).size;
+  $('estado-recetas').textContent =
+    `${num(recetas.puntos.length)} recetas, ${lineas} líneas, ${diametros} diámetros. Ya no hace falta volver a subirlo.`;
+  $('paso-recetas').classList.add('listo');
+  revisarListo();
+}
+
+function revisarListo() {
+  $('analizar').disabled = !(recetas && $('archivo-schedule').files.length);
+}
+
+function pintarHistorial() {
+  if (!estado.programas.length) return ($('historial').innerHTML = '');
+  $('historial').innerHTML = `
+    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Programas anteriores</h3>
+    <table>
+      <tr><th>Folio</th><th>Archivo</th><th>Órdenes</th><th>Toneladas</th><th>Oportunidad</th></tr>
+      ${estado.programas
+        .map(
+          (p) => `<tr>
+            <td><a href="#" data-folio="${p.folio}">${p.folio}</a></td>
+            <td style="text-align:left;color:var(--texto-tenue)">${p.archivo ?? ''}</td>
+            <td class="num">${num(p.ordenes)}</td>
+            <td class="num">${num(p.kilogramos / 1000, 1)}</td>
+            <td class="num" style="color:var(--verde)">+${num(p.analisis.toneladasIncremento, 1)} t</td>
+          </tr>`,
+        )
+        .join('')}
+    </table>`;
+  for (const a of $('historial').querySelectorAll('a[data-folio]')) {
+    a.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const p = estado.programas.find((x) => x.folio === a.dataset.folio);
+      if (p) mostrar(p);
+    });
+  }
+}
+
+// --- pintado -----------------------------------------------------------------
 
 function mostrar(p) {
   paquete = p;
@@ -126,14 +160,13 @@ function mostrar(p) {
   pintarTablero();
   pintarConsejos();
   pintarTablaLineas();
-  cargarRendimiento();
+  pintarRendimiento();
   abrirPanel('programacion');
 }
 
 function pintarKpis() {
   const a = paquete.analisis;
   const gana = a.toneladasIncremento > 0.05;
-
   const bloques = [
     kpi('Cierra hoy en', num(a.makespanActual, 1), 'h', `lo que tarda ${a.cuelloDeBotella}`, 'malo'),
     kpi('Con el reajuste', num(a.makespanPropuesto, 1), 'h',
@@ -142,19 +175,24 @@ function pintarKpis() {
         `sobre las ${num(a.toneladasActuales, 1)} t del programa`, gana ? 'bueno' : ''),
     kpi('Hay que mover', num(a.ordenesMovidas), `de ${num(paquete.ordenes)}`,
         `${a.movimientos.length} movimientos`, ''),
-  ];
-  $('kpis-programacion').innerHTML = bloques.join('');
-  $('kpis-analisis').innerHTML = bloques.join('');
-
+  ].join('');
+  $('kpis-programacion').innerHTML = bloques;
+  $('kpis-analisis').innerHTML = bloques;
   pintarAvisos(a.avisos ?? []);
 }
 
-/** Los avisos del análisis, del más grave al menos grave. Cada uno trae su
- *  impacto cuantificado: un aviso sin número se ignora a la tercera vez. */
+function kpi(etiqueta, valor, unidad, pie, clase) {
+  return `<div class="kpi ${clase}">
+    <div class="etiqueta">${etiqueta}</div>
+    <div class="valor">${valor}<small>${unidad}</small></div>
+    <div class="pie">${pie}</div>
+  </div>`;
+}
+
 function pintarAvisos(avisos) {
-  const caja = $('avisos');
-  if (!avisos.length) return (caja.innerHTML = '');
-  caja.innerHTML = avisos.map((av) => (av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av))).join('');
+  $('avisos').innerHTML = avisos
+    .map((av) => (av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av)))
+    .join('');
 }
 
 function pintarAvisoDevanador(av) {
@@ -180,14 +218,6 @@ function pintarAvisoSinReceta(av) {
   </div>`;
 }
 
-function kpi(etiqueta, valor, unidad, pie, clase) {
-  return `<div class="kpi ${clase}">
-    <div class="etiqueta">${etiqueta}</div>
-    <div class="valor">${valor}<small>${unidad}</small></div>
-    <div class="pie">${pie}</div>
-  </div>`;
-}
-
 function pintarTablero() {
   const propuesta = vista === 'propuesto';
   $('leyenda-tablero').textContent = propuesta
@@ -201,7 +231,6 @@ function pintarTablero() {
       const d = propuesta ? l.propuesto : l.actual;
       const esCuello = !propuesta && l.linea === paquete.analisis.cuelloDeBotella;
       const delta = l.propuesto.horas - l.actual.horas;
-
       const corridas = propuesta
         ? paquete.lineas
             .flatMap((otra) => otra.corridas.map((c) => ({ ...c, origen: otra.linea })))
@@ -258,7 +287,8 @@ function pintarConsejos() {
     return;
   }
 
-  const encabezado = `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">
+  $('consejos').innerHTML =
+    `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">
       Hoy el programa cierra en <b>${num(a.makespanActual, 1)} h</b>, que es lo que tarda
       <b>${a.cuelloDeBotella}</b>; las demás líneas acaban antes y esperan.
       Con estos ${a.movimientos.length} movimientos cierra en <b>${num(a.makespanPropuesto, 1)} h</b>,
@@ -268,10 +298,7 @@ function pintarConsejos() {
         Ese incremento supone que haya carga con qué llenar las horas que se liberan.
         Si no la hay, la ganancia es cerrar el programa antes.
       </div>
-    </div>`;
-
-  $('consejos').innerHTML =
-    encabezado +
+    </div>` +
     a.movimientos
       .map(
         (m) => `<div class="consejo" data-id="${m.id}" data-aceptado="${m.aceptado ?? ''}">
@@ -296,18 +323,16 @@ function pintarConsejos() {
       )
       .join('');
 
-  $('consejos').querySelectorAll('button[data-accion]').forEach((b) =>
-    b.addEventListener('click', async () => {
+  for (const b of $('consejos').querySelectorAll('button[data-accion]')) {
+    b.addEventListener('click', () => {
       const fila = b.closest('.consejo');
       const aceptado = b.dataset.accion === 'si';
       fila.dataset.aceptado = String(aceptado);
-      await fetch(`/api/programas/${paquete.folio}/movimientos/${fila.dataset.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aceptado }),
-      });
-    }),
-  );
+      const m = paquete.analisis.movimientos.find((x) => x.id === Number(fila.dataset.id));
+      if (m) m.aceptado = aceptado;
+      guardarEstado();
+    });
+  }
 }
 
 function pintarTablaLineas() {
@@ -334,44 +359,42 @@ function pintarTablaLineas() {
       .join('')}`;
 }
 
-async function cargarRendimiento() {
-  const r = await fetch(`/api/programas/${paquete.folio}/rendimiento`);
-  if (!r.ok) return;
-  const { lineas, filas } = await r.json();
+function pintarRendimiento() {
+  const lineas = catalogoLineas(paquete.supuestos);
+  const tabla = new TablaVelocidades(recetas.puntos, lineas);
+  const programa = new Programa(paquete.detalleOrdenes.map((o) => new Orden(o)));
+  const { lineas: claves, filas } = matrizRendimiento(tabla, programa);
+
   $('tabla-rendimiento').innerHTML = `
-    <tr><th>Ø mm</th>${lineas.map((l) => `<th>${l}</th>`).join('')}<th>Más rápida</th></tr>
+    <tr><th>Ø mm</th>${claves.map((l) => `<th>${l}</th>`).join('')}<th>Más rápida</th></tr>
     ${filas
       .map(
         (f) => `<tr>
           <td class="num">${num(f.diametroMm, 2)}</td>
-          ${lineas
+          ${claves
             .map((l) => {
               const v = f.celdas[l];
               if (v === null || v === undefined) return '<td class="vacia">—</td>';
-              // Se marcan TODAS las que empatan en el maximo, no solo una: al
-              // programador le sirve ver todas las opciones igual de rapidas.
               const esMejor = f.mejorKgH > 0 && Math.abs(v - f.mejorKgH) < 0.05;
               return `<td class="num ${esMejor ? 'mejor' : ''}">${num(v)}</td>`;
             })
             .join('')}
-          <td style="text-align:left;color:var(--verde);font-weight:600">${empatadas(f, lineas)}</td>
+          <td style="text-align:left;color:var(--verde);font-weight:600">${empatadas(f, claves)}</td>
         </tr>`,
       )
       .join('')}`;
 }
 
 /** Todas las lineas que empatan como la mas rapida de ese diametro. */
-function empatadas(fila, lineas) {
+function empatadas(fila, claves) {
   if (!fila.mejorKgH) return '—';
-  const iguales = lineas.filter(
+  const iguales = claves.filter(
     (l) => fila.celdas[l] !== null && Math.abs(fila.celdas[l] - fila.mejorKgH) < 0.05,
   );
   return iguales.length <= 3 ? iguales.join(', ') : `${iguales.length} líneas`;
 }
 
-// ---------------------------------------------------------------------------
-// Navegación
-// ---------------------------------------------------------------------------
+// --- navegacion --------------------------------------------------------------
 
 $('tabs').addEventListener('click', (ev) => {
   const b = ev.target.closest('button[data-panel]');
@@ -405,4 +428,12 @@ function ocultarError() {
   $('error').hidden = true;
 }
 
-arrancar();
+// --- arranque ----------------------------------------------------------------
+
+if (estado.recetas) {
+  // El navegador recuerda que ya se cargo un WI, pero no las recetas: pesan
+  // demasiado para guardarlas. Se pide de nuevo el archivo.
+  $('estado-recetas').textContent =
+    `La última vez cargaste ${estado.recetas.archivo} (${num(estado.recetas.puntos)} recetas). Vuelve a seleccionarlo.`;
+}
+pintarHistorial();

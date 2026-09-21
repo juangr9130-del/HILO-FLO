@@ -11,6 +11,16 @@
  */
 
 /**
+ * Rango plausible de diametro de alambre estirado en las lineas ITW (mm).
+ *
+ * Lo usan los dos lectores: en el WI descarta renglones de encabezado que
+ * traen numeros en la columna A, y en el schedule evita confundir el rango
+ * de resistencia ("1950-2000 MPa") con un diametro.
+ */
+export const DIAMETRO_MIN = 4;
+export const DIAMETRO_MAX = 30;
+
+/**
  * Devanador que se asume cuando el schedule no indica cual se uso.
  *
  * El deber ser en Florence es el DEM, confirmado con planta, asi que es lo

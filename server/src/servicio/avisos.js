@@ -9,6 +9,7 @@
 
 import { Orden, Programa, WINDER_ALTERNO, WINDER_PREDETERMINADO } from '../motor/modelos.js';
 import { evaluarPrograma } from '../motor/programa.js';
+import { redondear } from '../util/numeros.js';
 
 /**
  * Ordenes que corren en una linea cuya receta depende del devanador, pero
@@ -91,7 +92,3 @@ export function reunirAvisos(programa, lineas, tabla, evaluacion) {
     .sort((a, b) => orden[a.severidad] - orden[b.severidad]);
 }
 
-function redondear(v, d) {
-  const f = 10 ** d;
-  return Math.round(v * f) / f;
-}

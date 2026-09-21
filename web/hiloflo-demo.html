@@ -1,0 +1,2715 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HILO-FLO — Programación ITW (demo)</title>
+
+<!--
+  MÓDULO DEMO DE HILO-FLO — Mubea Florence
+
+  Un solo archivo. Se abre con doble clic, sin servidor, sin base de datos y
+  sin internet: los .xlsx se leen y se analizan dentro del navegador.
+
+  NO se edita a mano. Se genera desde las fuentes del módulo con
+      cd server && npm run demo
+  El motor que corre aquí es exactamente el mismo que corre en producción.
+
+  Lo que este demo NO hace, y el módulo instalado sí:
+    - guardar los folios (aquí viven en el navegador y se pierden al limpiarlo)
+    - login por número de empleado y PIN
+    - compartir lo que se analizó con los demás módulos de la plataforma
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* HILO-FLO — estandar visual de la plataforma Mubea.
+   Azul #1B3A66 para header y marca. Naranja #CC5500 SOLO en el boton de
+   accion primaria y el tab activo, nunca como acento general.
+   Tarjeta KPI: bloque solido, nunca tarjeta blanca con borde de color. */
+
+:root {
+  --azul: #1b3a66;
+  --azul-claro: #2a6db0;
+  --naranja: #cc5500;
+  --verde: #2f8f5b;
+  --ambar: #c98a12;
+  --rojo: #c23b2e;
+  --gris: #6b7785;
+
+  --fondo: #f4f6f8;
+  --superficie: #ffffff;
+  --borde: #dde2e8;
+  --texto: #1f2933;
+  --texto-tenue: #6b7785;
+
+  --radio: 6px;
+  --sombra: 0 1px 3px rgba(27, 58, 102, 0.12);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Public Sans', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--texto);
+  background: var(--fondo);
+}
+
+h1, h2, h3, .numero, th {
+  font-family: 'Barlow Condensed', 'Public Sans', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- Header ---------- */
+
+header {
+  background: var(--azul);
+  color: #fff;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 56px;
+}
+
+header h1 { font-size: 22px; margin: 0; letter-spacing: 0.04em; }
+header .planta { font-size: 12px; opacity: 0.75; letter-spacing: 0.08em; text-transform: uppercase; }
+header .relleno { flex: 1; }
+
+.folio {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 18px;
+  background: rgba(255, 255, 255, 0.14);
+  padding: 3px 12px;
+  border-radius: var(--radio);
+  letter-spacing: 0.06em;
+}
+
+header .usuario { font-size: 13px; opacity: 0.85; }
+
+/* ---------- Tabs ---------- */
+
+/* El atributo hidden lo pisa cualquier regla de display del autor, asi que
+   hay que declararlo aparte para cada elemento que lo use. */
+nav.tabs[hidden] { display: none; }
+
+nav.tabs {
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  padding: 0 20px;
+  display: flex;
+  gap: 4px;
+}
+
+nav.tabs button {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--texto-tenue);
+  cursor: pointer;
+}
+
+nav.tabs button:hover { color: var(--texto); }
+nav.tabs button[aria-selected='true'] { color: var(--naranja); border-bottom-color: var(--naranja); font-weight: 600; }
+
+main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+section[hidden] { display: none; }
+
+/* ---------- Botones ---------- */
+
+button.primario {
+  background: var(--naranja);
+  color: #fff;
+  border: none;
+  border-radius: var(--radio);
+  padding: 10px 20px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primario:hover { filter: brightness(1.08); }
+button.primario:disabled { background: var(--gris); cursor: not-allowed; }
+
+button.secundario {
+  background: var(--superficie);
+  color: var(--azul);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 7px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+button.secundario:hover { border-color: var(--azul); }
+button.secundario[aria-pressed='true'] { background: var(--azul); color: #fff; border-color: var(--azul); }
+
+/* ---------- Carga ---------- */
+
+.carga {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 28px;
+  box-shadow: var(--sombra);
+  max-width: 720px;
+  margin: 40px auto;
+}
+
+.carga h2 { margin: 0 0 6px; font-size: 22px; color: var(--azul); }
+.carga p { margin: 0 0 20px; color: var(--texto-tenue); }
+
+.paso {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--borde);
+}
+.paso:first-of-type { border-top: none; }
+
+.paso .indice {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--azul);
+  color: #fff;
+  display: grid; place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px;
+  flex: none;
+}
+.paso.listo .indice { background: var(--verde); }
+.paso .texto { flex: 1; }
+.paso .texto strong { display: block; }
+.paso .texto span { color: var(--texto-tenue); font-size: 13px; }
+
+input[type='file'] { font: inherit; font-size: 13px; max-width: 260px; }
+
+/* ---------- KPIs: bloque solido, nunca tarjeta con acento ---------- */
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 20px; }
+
+.kpi { border-radius: var(--radio); padding: 16px 18px; color: #fff; background: var(--azul); }
+.kpi.bueno { background: var(--verde); }
+.kpi.alerta { background: var(--ambar); }
+.kpi.malo { background: var(--rojo); }
+
+.kpi .etiqueta { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85; }
+.kpi .valor { font-family: 'Barlow Condensed', sans-serif; font-size: 34px; line-height: 1.1; margin: 4px 0 2px; }
+.kpi .valor small { font-size: 16px; opacity: 0.8; margin-left: 3px; }
+.kpi .pie { font-size: 12px; opacity: 0.85; }
+
+/* ---------- Tarjetas ---------- */
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  margin-bottom: 20px;
+}
+.tarjeta > h2 {
+  margin: 0;
+  padding: 14px 18px;
+  font-size: 18px;
+  color: var(--azul);
+  border-bottom: 1px solid var(--borde);
+}
+.tarjeta > h2 small { font-family: 'Public Sans', sans-serif; font-weight: 400; font-size: 13px; color: var(--texto-tenue); margin-left: 10px; }
+.tarjeta .cuerpo { padding: 18px; }
+
+/* ---------- Consejos ---------- */
+
+.consejo {
+  display: flex;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--borde);
+  align-items: flex-start;
+}
+.consejo:last-child { border-bottom: none; }
+
+.consejo .indice {
+  width: 26px; height: 26px; flex: none;
+  border-radius: 50%;
+  background: var(--azul);
+  color: #fff;
+  display: grid; place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+.consejo .detalle { flex: 1; }
+.consejo .mover { font-size: 15px; }
+.consejo .mover b { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; letter-spacing: 0.02em; }
+.consejo .flecha { color: var(--naranja); font-weight: 700; margin: 0 6px; }
+.consejo .meta { color: var(--texto-tenue); font-size: 13px; margin-top: 3px; }
+.consejo .folios { font-size: 12px; color: var(--texto-tenue); margin-top: 5px; word-break: break-all; }
+.consejo .ganancia {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 17px;
+  color: var(--verde);
+  white-space: nowrap;
+}
+.consejo .acciones { display: flex; gap: 6px; }
+.consejo[data-aceptado='true'] { background: #f2f9f5; }
+.consejo[data-aceptado='false'] { opacity: 0.55; }
+
+/* ---------- Tablero de lineas ---------- */
+
+.linea {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  border-bottom: 1px solid var(--borde);
+}
+.linea:last-child { border-bottom: none; }
+.linea.inactiva { opacity: 0.5; }
+
+.linea .rotulo { padding: 12px 14px; border-right: 1px solid var(--borde); }
+.linea .rotulo .clave { font-family: 'Barlow Condensed', sans-serif; font-size: 19px; color: var(--azul); }
+.linea .rotulo .wc { font-size: 11px; color: var(--texto-tenue); }
+.linea .contenido { padding: 10px 14px; min-width: 0; }
+
+.barra { height: 8px; background: #eef1f4; border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 8px; }
+.barra i { display: block; height: 100%; }
+.barra i.corrida { background: var(--azul-claro); }
+.barra i.cambio { background: var(--ambar); }
+.barra.cuello i.corrida { background: var(--rojo); }
+.barra.propuesta i.corrida { background: var(--verde); }
+
+.horas { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; color: var(--texto-tenue); margin-bottom: 8px; }
+.horas b { color: var(--texto); font-size: 16px; }
+.horas .baja { color: var(--verde); }
+.horas .sube { color: var(--rojo); }
+
+.corridas { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.rollo {
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 12px;
+  background: #fbfcfd;
+  white-space: nowrap;
+}
+.rollo .d { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; color: var(--azul); }
+.rollo.sale { border-color: var(--naranja); background: #fff4ec; }
+.rollo.sale .destino { color: var(--naranja); font-weight: 600; }
+.rollo.entra { border-color: var(--verde); background: #f2f9f5; }
+.rollo.sin-receta { border-color: var(--rojo); background: #fdf3f2; }
+
+/* ---------- Tablas ---------- */
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--borde); }
+th { background: #eef1f4; color: var(--azul); font-size: 13px; position: sticky; top: 0; }
+th:first-child, td:first-child { text-align: left; }
+td.num { font-family: 'Barlow Condensed', sans-serif; font-size: 15px; }
+td.vacia { color: #c8ced6; }
+td.mejor { background: #f2f9f5; color: var(--verde); font-weight: 600; }
+.scroll { max-height: 70vh; overflow: auto; }
+
+/* ---------- Avisos ---------- */
+
+.aviso { border-radius: var(--radio); padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
+.aviso.error { background: #fdf3f2; border-left: 4px solid var(--rojo); color: #8d2b21; }
+.aviso.nota { background: #fff9ec; border-left: 4px solid var(--ambar); color: #7a5409; }
+.aviso.info { background: #eef4fb; border-left: 4px solid var(--azul-claro); color: #1b3a66; }
+.aviso[hidden] { display: none; }
+
+.vacio { text-align: center; color: var(--texto-tenue); padding: 40px; }
+
+
+/* Sólo del demo: el banner que aclara que esto no es el módulo instalado. */
+.banner-demo {
+  background: var(--ambar);
+  color: #fff;
+  padding: 7px 20px;
+  font-size: 13px;
+}
+.banner-demo b { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>HILO-FLO</h1>
+  <span class="planta">Florence · Líneas ITW</span>
+  <span class="relleno"></span>
+  <span class="folio" id="folio" hidden></span>
+  <span class="usuario">demo</span>
+</header>
+
+<div class="banner-demo">
+  <b>Versión de prueba.</b>
+  Todo corre dentro de tu navegador — los archivos no salen de esta máquina.
+  Los folios se guardan aquí mismo y se pierden si limpias el navegador.
+</div>
+
+<nav class="tabs" id="tabs" hidden>
+  <button data-panel="programacion" aria-selected="true">Programación</button>
+  <button data-panel="analisis" aria-selected="false">Análisis</button>
+  <button data-panel="rendimiento" aria-selected="false">Rendimiento kg/h</button>
+</nav>
+
+<main>
+  <div class="aviso error" id="error" hidden></div>
+
+  <div class="carga" id="carga">
+    <h2>Cargar programa de producción</h2>
+    <p>El módulo lee los dos archivos tal como salen hoy de planta; no hay que
+       reformatearlos.</p>
+
+    <div class="paso" id="paso-recetas">
+      <span class="indice">1</span>
+      <span class="texto">
+        <strong>Parámetros de proceso</strong>
+        <span id="estado-recetas">WI-FLO-CSW-P-526 — las velocidades de receta. Se carga una vez.</span>
+      </span>
+      <input type="file" id="archivo-recetas" accept=".xlsx,.xlsm">
+    </div>
+
+    <div class="paso" id="paso-schedule">
+      <span class="indice">2</span>
+      <span class="texto">
+        <strong>Production schedule</strong>
+        <span>El Excel de SAP de la semana. Cada carga recibe su propio folio.</span>
+      </span>
+      <input type="file" id="archivo-schedule" accept=".xlsx,.xlsm">
+    </div>
+
+    <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
+      <button class="primario" id="analizar" disabled>Analizar programa</button>
+      <span id="progreso" style="color:var(--texto-tenue)"></span>
+    </div>
+
+    <div id="historial" style="margin-top:24px"></div>
+  </div>
+
+  <section id="panel-programacion" hidden>
+    <div class="kpis" id="kpis-programacion"></div>
+    <div id="avisos"></div>
+
+    <div class="tarjeta">
+      <h2>
+        Corridas por línea
+        <small id="leyenda-tablero"></small>
+        <span style="float:right;font-weight:400">
+          <button class="secundario" id="ver-actual" aria-pressed="true">Programa actual</button>
+          <button class="secundario" id="ver-propuesto" aria-pressed="false">Con el reajuste</button>
+        </span>
+      </h2>
+      <div id="tablero"></div>
+    </div>
+  </section>
+
+  <section id="panel-analisis" hidden>
+    <div class="kpis" id="kpis-analisis"></div>
+
+    <div class="tarjeta">
+      <h2>Qué conviene hacer <small>consejos ordenados por impacto</small></h2>
+      <div id="consejos"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Carga por línea <small>horas requeridas, antes y después del reajuste</small></h2>
+      <div class="cuerpo" style="padding:0">
+        <div class="scroll"><table id="tabla-lineas"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-rendimiento" hidden>
+    <div class="aviso info">
+      El rendimiento sale de la velocidad de receta y la geometría del alambre:
+      <strong>kg/h = mm/s × 3.6 × (π/4 · d²) × 7 850 kg/m³</strong>.
+      Celda vacía = esa línea no tiene receta para ese diámetro, o sea que no lo corre.
+      En verde, las líneas más rápidas de cada diámetro.
+    </div>
+    <div class="tarjeta">
+      <h2>Rendimiento kg/h por diámetro y línea</h2>
+      <div class="cuerpo" style="padding:0">
+        <div class="scroll"><table id="tabla-rendimiento"></table></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// ===== src/util/numeros.js ===========================================
+
+/** Utilidades numericas compartidas. Sin dependencias: se inlinea en el demo. */
+
+/** Redondea a N decimales sin el ruido de punto flotante del toFixed. */
+function redondear(valor, decimales) {
+  const f = 10 ** decimales;
+  return Math.round(valor * f) / f;
+}
+
+// ===== src/motor/modelos.js ==========================================
+
+/**
+ * Modelo de dominio de HILO-FLO (Mubea Florence, lineas ITW).
+ *
+ * Vocabulario de planta:
+ *   ITW      Induction Tempered Wire: las lineas de temple por induccion.
+ *   Linea    ITW-1 .. ITW-14 (la 15 esta por instalarse). En SAP son los
+ *            work centers BB001 .. BB014.
+ *   Orden    un renglon del production schedule: N kg de un alambre de cierto
+ *            diametro, ya asignado a un work center.
+ *   Programa el conjunto de ordenes del horizonte que se esta programando.
+ */
+
+/**
+ * Rango plausible de diametro de alambre estirado en las lineas ITW (mm).
+ *
+ * Lo usan los dos lectores: en el WI descarta renglones de encabezado que
+ * traen numeros en la columna A, y en el schedule evita confundir el rango
+ * de resistencia ("1950-2000 MPa") con un diametro.
+ */
+const DIAMETRO_MIN = 4;
+const DIAMETRO_MAX = 30;
+
+/**
+ * Devanador que se asume cuando el schedule no indica cual se uso.
+ *
+ * El deber ser en Florence es el DEM, confirmado con planta, asi que es lo
+ * que se calcula por omision. El WI dice que el schedule marca el DEM en la
+ * seccion de notas, pero en la practica casi nunca lo anota: tomar esa
+ * ausencia como "corrio con Neturen" subestimaria el rendimiento de ITW-2
+ * hasta a la mitad (2.18x de diferencia a 5.72 mm).
+ *
+ * Que no venga anotado no se ignora: el analisis levanta un aviso con las
+ * ordenes afectadas y con lo que costaria el cierre del programa si de
+ * verdad hubieran corrido con Neturen. Ver servicio/analisis.js.
+ */
+const WINDER_PREDETERMINADO = 'DEM';
+
+/** El otro devanador. El schedule lo puede indicar explicitamente para
+ *  registrar la excepcion al deber ser. */
+const WINDER_ALTERNO = 'NETUREN';
+
+/** BB001 -> ITW-1. Si no reconoce el patron, regresa el texto tal cual. */
+function workCenterALinea(workCenter) {
+  const m = /^\s*BB0*(\d+)\s*$/i.exec(String(workCenter ?? ''));
+  return m ? `ITW-${Number(m[1])}` : String(workCenter ?? '').trim();
+}
+
+/** ITW-1 -> BB001. */
+function lineaAWorkCenter(linea) {
+  const m = /^\s*ITW[-\s]?(\d+)\s*$/i.exec(String(linea ?? ''));
+  return m ? `BB${String(Number(m[1])).padStart(3, '0')}` : String(linea ?? '').trim();
+}
+
+/** Ordena ITW-2 antes que ITW-10 (numerico, no alfabetico). */
+function ordenNatural(linea) {
+  const m = /(\d+)/.exec(linea ?? '');
+  return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function compararLineas(a, b) {
+  return ordenNatural(a) - ordenNatural(b) || String(a).localeCompare(String(b));
+}
+
+/** Una linea de temple por induccion. */
+class Linea {
+  constructor({
+    clave,
+    horasDisponibles = 0,
+    eficiencia = 1,
+    minutosCambio = 0,
+    activa = true,
+  }) {
+    if (!(eficiencia > 0 && eficiencia <= 1)) {
+      throw new Error(`${clave}: eficiencia debe estar en (0, 1]`);
+    }
+    if (horasDisponibles < 0) {
+      throw new Error(`${clave}: horasDisponibles no puede ser negativa`);
+    }
+    this.clave = clave;
+    this.horasDisponibles = horasDisponibles;
+    this.eficiencia = eficiencia;
+    this.minutosCambio = minutosCambio;
+    this.activa = activa;
+    Object.freeze(this);
+  }
+
+  get workCenter() {
+    return lineaAWorkCenter(this.clave);
+  }
+}
+
+/**
+ * Una celda de la tabla ITW Line Speed del WI-FLO-CSW-P-526.
+ *
+ * `winder`, `grado` y `slm` son los discriminantes que trae el documento:
+ * ITW-2 se tabula por devanador (Neturen / DEM) y por grado (9254 vs 1065);
+ * ITW-10 se tabula por SLM / NON SLM. `null` significa "aplica a cualquiera".
+ */
+class PuntoVelocidad {
+  constructor({ linea, diametroMm, mmS, winder = null, grado = null, slm = null }) {
+    if (!(mmS > 0)) throw new Error(`${linea}@${diametroMm}: mmS debe ser > 0`);
+    if (!(diametroMm > 0)) throw new Error(`${linea}: diametroMm debe ser > 0`);
+    this.linea = linea;
+    this.diametroMm = diametroMm;
+    this.mmS = mmS;
+    this.winder = winder;
+    this.grado = grado;
+    this.slm = slm;
+    Object.freeze(this);
+  }
+
+  /** True si esta receta es usable para la orden. */
+  /**
+   * True si esta receta es usable para la orden.
+   *
+   * @param orden
+   * @param winderEsperado  devanador que se exige; null acepta cualquiera.
+   *   Lo decide TablaVelocidades, no la receta: primero se busca con el
+   *   deber ser y solo si ese diametro no esta tabulado se reintenta
+   *   abierto, para no perder una orden por un hueco del documento.
+   */
+  aplicaA(orden, winderEsperado = undefined) {
+    const esperado =
+      winderEsperado === undefined ? (orden.winder ?? WINDER_PREDETERMINADO) : winderEsperado;
+    if (this.winder !== null && esperado !== null && this.winder !== esperado) return false;
+    if (this.grado !== null && this.grado !== orden.grupoGrado) return false;
+    if (this.slm !== null && this.slm !== orden.slm) return false;
+    return true;
+  }
+
+
+  /** Cuantos discriminantes fija. Gana la receta mas especifica. */
+  get especificidad() {
+    return [this.winder, this.grado, this.slm].filter((x) => x !== null).length;
+  }
+}
+
+/** Un renglon del production schedule. */
+class Orden {
+  constructor({
+    id,
+    diametroMm,
+    kilogramos,
+    linea,
+    material = '',
+    descripcion = '',
+    grupoGrado = '9254',
+    slm = false,
+    winder = null,
+    secuencia = 0,
+    notas = '',
+    clientePo = '',
+    fijo = false,
+  }) {
+    if (!(kilogramos > 0)) throw new Error(`orden ${id}: kilogramos debe ser > 0`);
+    if (!(diametroMm > 0)) throw new Error(`orden ${id}: diametroMm debe ser > 0`);
+    this.id = id;
+    this.diametroMm = diametroMm;
+    this.kilogramos = kilogramos;
+    this.linea = linea;
+    this.material = material;
+    this.descripcion = descripcion;
+    this.grupoGrado = grupoGrado;
+    this.slm = slm;
+    this.winder = winder;
+    this.secuencia = secuencia;
+    this.notas = notas;
+    this.clientePo = clientePo;
+    this.fijo = fijo;
+    Object.freeze(this);
+  }
+
+  /** Etiqueta legible del diametro, para agrupar y reportar. */
+  get medida() {
+    return this.diametroMm.toFixed(2);
+  }
+
+  /** Lo unico de la orden que cambia la receta y el rendimiento. */
+  get firma() {
+    return `${this.diametroMm}|${this.grupoGrado}|${this.slm}|${this.winder}`;
+  }
+
+  moverA(linea, secuencia = null) {
+    return new Orden({
+      ...this,
+      linea,
+      secuencia: secuencia === null ? this.secuencia : secuencia,
+    });
+  }
+}
+
+/** El production schedule del horizonte. */
+class Programa {
+  constructor(ordenes = [], horizonte = '') {
+    this.ordenes = ordenes;
+    this.horizonte = horizonte;
+  }
+
+  get length() {
+    return this.ordenes.length;
+  }
+
+  get kilogramos() {
+    return this.ordenes.reduce((t, o) => t + o.kilogramos, 0);
+  }
+
+  /** Ordenes de una linea, en la secuencia en que estan programadas. */
+  deLinea(linea) {
+    return this.ordenes
+      .filter((o) => o.linea === linea)
+      .sort((a, b) => a.secuencia - b.secuencia || String(a.id).localeCompare(String(b.id)));
+  }
+
+  lineasUsadas() {
+    return [...new Set(this.ordenes.map((o) => o.linea))].sort(compararLineas);
+  }
+
+  reemplazar(ordenes) {
+    return new Programa([...ordenes], this.horizonte);
+  }
+}
+
+// ===== src/motor/rendimiento.js ======================================
+
+/**
+ * Rendimiento: de mm/s de receta a kilogramos por hora.
+ *
+ * El WI-FLO-CSW-P-526 da la velocidad de linea en mm/s por diametro de
+ * alambre estirado. Como el alambre es solido y el temple no cambia la
+ * seccion, el rendimiento masico sale directo de la geometria:
+ *
+ *     area (mm2)  = pi/4 * d^2
+ *     peso lineal = area * densidad
+ *     kg/h        = velocidad(mm/s) * 3600/1000 * peso lineal * eficiencia
+ *
+ * Ejemplo: 170 mm/s de alambre de 14.70 mm -> ~815 kg/h.
+ */
+
+
+/** Acero de resorte (9254 / 54SiCr6 / 60SiCr7 / SAE1065). kg/m3. */
+const DENSIDAD_ACERO = 7850;
+
+/** Tolerancia al buscar el diametro en la tabla (mm). La reticula del WI es
+ *  de 0.05 mm, asi que 0.30 mm cubre de sobra cualquier redondeo. */
+const TOLERANCIA_MM = 0.3;
+
+/** Seccion transversal del alambre. */
+function areaMm2(diametroMm) {
+  if (!(diametroMm > 0)) throw new Error('el diametro debe ser positivo');
+  return (Math.PI / 4) * diametroMm ** 2;
+}
+
+/** Kilogramos por metro de alambre. */
+function pesoLinealKgM(diametroMm, densidadKgM3 = DENSIDAD_ACERO) {
+  return areaMm2(diametroMm) * 1e-6 * densidadKgM3;
+}
+
+/** Rendimiento masico de una linea corriendo esa receta. */
+function kgHora(mmS, diametroMm, { eficiencia = 1, densidadKgM3 = DENSIDAD_ACERO } = {}) {
+  if (mmS < 0) throw new Error('la velocidad no puede ser negativa');
+  const metrosHora = (mmS * 3600) / 1000;
+  return metrosHora * pesoLinealKgM(diametroMm, densidadKgM3) * eficiencia;
+}
+
+/**
+ * Las recetas del WI, consultables por linea y orden.
+ *
+ * Es tambien la matriz de compatibilidad: si una linea no tiene receta para
+ * el diametro de una orden, esa linea no la puede correr.
+ */
+class TablaVelocidades {
+  /**
+   * @param {PuntoVelocidad[]} puntos
+   * @param {Linea[]} lineas  de aqui sale la eficiencia de cada linea
+   * @param {{densidadKgM3?:number, politica?:'arriba'|'cercano', toleranciaMm?:number}} opciones
+   *   politica: como resolver un diametro que no cae exacto en la reticula.
+   *     'arriba'  -> punto tabulado inmediato superior (conservador: a mayor
+   *                  diametro, menor velocidad)
+   *     'cercano' -> el punto tabulado mas cercano
+   */
+  constructor(puntos, lineas = [], opciones = {}) {
+    const { densidadKgM3 = DENSIDAD_ACERO, politica = 'arriba', toleranciaMm = TOLERANCIA_MM } =
+      opciones;
+    this.puntos = puntos;
+    this.densidadKgM3 = densidadKgM3;
+    this.politica = politica;
+    this.toleranciaMm = toleranciaMm;
+    this.eficiencias = new Map(lineas.map((l) => [l.clave, l.eficiencia]));
+
+    this.porLinea = new Map();
+    for (const p of puntos) {
+      if (!this.porLinea.has(p.linea)) this.porLinea.set(p.linea, []);
+      this.porLinea.get(p.linea).push(p);
+    }
+    for (const lista of this.porLinea.values()) lista.sort((a, b) => a.diametroMm - b.diametroMm);
+
+    // El optimizador consulta la misma combinacion miles de veces; sin
+    // memoria, cada consulta recorre las ~260 recetas de la linea.
+    this._cacheReceta = new Map();
+    this._cacheKgHora = new Map();
+  }
+
+  get lineas() {
+    return [...this.porLinea.keys()].sort(compararLineas);
+  }
+
+  get size() {
+    return this.puntos.length;
+  }
+
+  diametrosDe(linea) {
+    return [...new Set((this.porLinea.get(linea) ?? []).map((p) => p.diametroMm))].sort(
+      (a, b) => a - b,
+    );
+  }
+
+  rangoDe(linea) {
+    const ds = this.diametrosDe(linea);
+    return ds.length ? [ds[0], ds[ds.length - 1]] : null;
+  }
+
+  /** La receta que aplica a esa orden en esa linea, o null. */
+  receta(linea, orden) {
+    const clave = `${linea}#${orden.firma}`;
+    if (this._cacheReceta.has(clave)) return this._cacheReceta.get(clave);
+    const receta = this._buscarReceta(linea, orden);
+    this._cacheReceta.set(clave, receta);
+    return receta;
+  }
+
+  _buscarReceta(linea, orden) {
+    const conDeberSer = this._buscarConDevanador(linea, orden, undefined);
+    if (conDeberSer || orden.winder !== null) return conDeberSer;
+    // El schedule no anoto el devanador y el deber ser no esta tabulado para
+    // ese diametro. Antes que dar la orden por imposible de correr, se usa la
+    // receta que si exista: un hueco del documento no es una incapacidad de
+    // la linea. El aviso del analisis reporta que no venia anotado.
+    return this._buscarConDevanador(linea, orden, null);
+  }
+
+  _buscarConDevanador(linea, orden, winderEsperado) {
+    const candidatos = (this.porLinea.get(linea) ?? []).filter((p) =>
+      p.aplicaA(orden, winderEsperado),
+    );
+    if (!candidatos.length) return null;
+    const diametro = this._resolverDiametro(candidatos, orden.diametroMm);
+    if (diametro === null) return null;
+    // De los puntos de ese diametro gana el mas especifico y, a igualdad,
+    // el mas lento (criterio conservador).
+    return candidatos
+      .filter((p) => p.diametroMm === diametro)
+      .sort((a, b) => b.especificidad - a.especificidad || a.mmS - b.mmS)[0];
+  }
+
+  _resolverDiametro(candidatos, diametroMm) {
+    const disponibles = [...new Set(candidatos.map((p) => p.diametroMm))].sort((a, b) => a - b);
+    const exacto = disponibles.find((d) => Math.abs(d - diametroMm) < 1e-9);
+    if (exacto !== undefined) return exacto;
+    if (this.politica === 'arriba') {
+      const arriba = disponibles.filter((d) => d >= diametroMm);
+      if (arriba.length && arriba[0] - diametroMm <= this.toleranciaMm) return arriba[0];
+    }
+    const cercano = disponibles.reduce((mejor, d) =>
+      Math.abs(d - diametroMm) < Math.abs(mejor - diametroMm) ? d : mejor,
+    );
+    return Math.abs(cercano - diametroMm) <= this.toleranciaMm ? cercano : null;
+  }
+
+  mmS(linea, orden) {
+    return this.receta(linea, orden)?.mmS ?? null;
+  }
+
+  /** Rendimiento de esa orden en esa linea, ya con eficiencia. */
+  kgHora(linea, orden) {
+    const clave = `${linea}#${orden.firma}`;
+    if (this._cacheKgHora.has(clave)) return this._cacheKgHora.get(clave);
+    const receta = this.receta(linea, orden);
+    const valor =
+      receta === null
+        ? null
+        : kgHora(receta.mmS, orden.diametroMm, {
+            eficiencia: this.eficiencias.get(linea) ?? 1,
+            densidadKgM3: this.densidadKgM3,
+          });
+    this._cacheKgHora.set(clave, valor);
+    return valor;
+  }
+
+  puedeCorrer(linea, orden) {
+    return this.receta(linea, orden) !== null;
+  }
+
+  /** Lineas capaces de correr la orden, de la mas rapida a la mas lenta. */
+  lineasPara(orden) {
+    const capaces = [];
+    for (const linea of this.porLinea.keys()) {
+      const kgh = this.kgHora(linea, orden);
+      if (kgh) capaces.push([linea, kgh]);
+    }
+    capaces.sort((a, b) => b[1] - a[1] || compararLineas(a[0], b[0]));
+    return capaces.map(([l]) => l);
+  }
+
+  horasPara(linea, orden) {
+    const kgh = this.kgHora(linea, orden);
+    return kgh ? orden.kilogramos / kgh : null;
+  }
+}
+
+// ===== src/motor/programa.js =========================================
+
+/**
+ * Evaluacion del production schedule.
+ *
+ * Dado el schedule que armo el programador (que ordenes van en que linea y
+ * en que orden), calcula por linea: horas de corrida, horas de cambio de
+ * medida, utilizacion contra las horas disponibles y cuantos kilogramos
+ * alcanzan a salir dentro del horizonte.
+ */
+
+
+/** Como le fue a una orden en la linea donde esta programada. */
+class Corrida {
+  constructor(orden, kgHora, horasProduccion, horasCambio, kgProducibles) {
+    this.orden = orden;
+    this.kgHora = kgHora;
+    this.horasProduccion = horasProduccion;
+    this.horasCambio = horasCambio;
+    this.kgProducibles = kgProducibles;
+  }
+
+  get completa() {
+    return this.kgProducibles >= this.orden.kilogramos - 1e-6;
+  }
+
+  get sinReceta() {
+    return this.kgHora === null;
+  }
+}
+
+class ResultadoLinea {
+  constructor(linea, corridas = []) {
+    this.linea = linea;
+    this.corridas = corridas;
+  }
+
+  get kgProgramados() {
+    return this.corridas.reduce((t, c) => t + c.orden.kilogramos, 0);
+  }
+  get kgProducibles() {
+    return this.corridas.reduce((t, c) => t + c.kgProducibles, 0);
+  }
+  get horasProduccion() {
+    return this.corridas.reduce((t, c) => t + c.horasProduccion, 0);
+  }
+  get horasCambio() {
+    return this.corridas.reduce((t, c) => t + c.horasCambio, 0);
+  }
+  get horasRequeridas() {
+    return this.horasProduccion + this.horasCambio;
+  }
+  get horasOciosas() {
+    return Math.max(0, this.linea.horasDisponibles - this.horasRequeridas);
+  }
+  get horasSobregiro() {
+    return Math.max(0, this.horasRequeridas - this.linea.horasDisponibles);
+  }
+  get utilizacion() {
+    return this.linea.horasDisponibles > 0 ? this.horasRequeridas / this.linea.horasDisponibles : 0;
+  }
+  get cambios() {
+    return this.corridas.filter((c) => c.horasCambio > 0).length;
+  }
+  get sinReceta() {
+    return this.corridas.filter((c) => c.sinReceta).map((c) => c.orden);
+  }
+}
+
+class Evaluacion {
+  constructor(lineas = new Map()) {
+    this.lineas = lineas;
+  }
+
+  get kgProgramados() {
+    return [...this.lineas.values()].reduce((t, r) => t + r.kgProgramados, 0);
+  }
+  get kgProducibles() {
+    return [...this.lineas.values()].reduce((t, r) => t + r.kgProducibles, 0);
+  }
+  get toneladasProducibles() {
+    return this.kgProducibles / 1000;
+  }
+  get kgNoProducibles() {
+    return this.kgProgramados - this.kgProducibles;
+  }
+  get horasRequeridas() {
+    return [...this.lineas.values()].reduce((t, r) => t + r.horasRequeridas, 0);
+  }
+  get horasOciosas() {
+    return [...this.lineas.values()].reduce((t, r) => t + r.horasOciosas, 0);
+  }
+  get sinReceta() {
+    return [...this.lineas.values()].flatMap((r) => r.sinReceta);
+  }
+
+  /** Horas de la linea mas cargada: cuando cierra el programa. */
+  get makespan() {
+    let max = 0;
+    for (const r of this.lineas.values()) max = Math.max(max, r.horasRequeridas);
+    return max;
+  }
+
+  /** La linea que define el cierre del programa. */
+  get lineaMasCargada() {
+    let clave = null;
+    let max = -1;
+    for (const [c, r] of this.lineas) {
+      if (r.horasRequeridas > max) {
+        max = r.horasRequeridas;
+        clave = c;
+      }
+    }
+    return clave;
+  }
+
+  clavesOrdenadas() {
+    return [...this.lineas.keys()].sort(compararLineas);
+  }
+}
+
+/** Corre la secuencia de la linea consumiendo sus horas disponibles. */
+function evaluarLinea(linea, ordenes, tabla) {
+  const resultado = new ResultadoLinea(linea, []);
+  let restantes = linea.horasDisponibles;
+  let diametroPrevio = null;
+
+  for (const orden of ordenes) {
+    const kgh = tabla.kgHora(linea.clave, orden);
+    if (kgh === null) {
+      // La linea no tiene receta para ese diametro: se reporta aparte y no
+      // consume horas.
+      resultado.corridas.push(new Corrida(orden, null, 0, 0, 0));
+      continue;
+    }
+
+    const cambia = diametroPrevio !== null && diametroPrevio !== orden.diametroMm;
+    const horasCambio = cambia ? linea.minutosCambio / 60 : 0;
+    const horasProduccion = orden.kilogramos / kgh;
+    diametroPrevio = orden.diametroMm;
+
+    // Cuanto alcanza a salir con las horas que quedan.
+    const disponibles = Math.max(0, restantes - horasCambio);
+    const kgProducibles = Math.min(orden.kilogramos, disponibles * kgh);
+    restantes = Math.max(0, restantes - horasCambio - horasProduccion);
+
+    resultado.corridas.push(new Corrida(orden, kgh, horasProduccion, horasCambio, kgProducibles));
+  }
+
+  return resultado;
+}
+
+/** Evalua el schedule completo, linea por linea. */
+function evaluarPrograma(programa, lineas, tabla) {
+  const porClave = new Map(lineas.map((l) => [l.clave, l]));
+  const desconocidas = programa.lineasUsadas().filter((l) => !porClave.has(l));
+  if (desconocidas.length) {
+    throw new Error(
+      `el schedule usa lineas que no estan en el catalogo: ${desconocidas.join(', ')}`,
+    );
+  }
+
+  const evaluacion = new Evaluacion(new Map());
+  for (const linea of lineas) {
+    evaluacion.lineas.set(linea.clave, evaluarLinea(linea, programa.deLinea(linea.clave), tabla));
+  }
+  return evaluacion;
+}
+
+// ===== src/motor/optimizador.js ======================================
+
+/**
+ * Busqueda de areas de oportunidad en el production schedule.
+ *
+ * No reescribe el schedule por su cuenta: propone movimientos concretos
+ * ("mueve estas ordenes de ITW-12 a ITW-13") con lo que cada uno gana, para
+ * que el programador decida.
+ *
+ * Estrategia: busqueda local sobre el schedule que ya armo el programador.
+ * En cada vuelta se prueban tres jugadas y se toma la mejor:
+ *
+ *   MOVER BLOQUE  pasar de golpe todas las ordenes de un diametro a otra
+ *                 linea. Es la que mas rinde: el cambio de medida en el
+ *                 destino se paga una sola vez y se reparte entre todo el
+ *                 bloque, mientras que moviendo orden por orden la primera
+ *                 carga con el cambio completo y casi nunca sale positiva.
+ *   MOVER         pasar una sola orden a otra linea con receta.
+ *   PERMUTAR      intercambiar dos ordenes entre sus lineas.
+ */
+
+
+
+/** Mejora minima (kg) para que valga la pena proponer un movimiento. */
+const UMBRAL_KG = 50;
+
+/** Mejora minima (horas) cuando el movimiento no cambia la tonelada pero si
+ *  libera capacidad. */
+const UMBRAL_HORAS = 0.5;
+
+/**
+ * El objetivo es lexicografico, en tres niveles:
+ *
+ *   1. la tonelada que sale dentro del horizonte          (PESO_KG)
+ *   2. el cierre del programa, o sea la linea mas cargada (PESO_MAKESPAN)
+ *   3. las horas-linea totales                            (peso 1)
+ *
+ * El nivel 2 es el que balancea. Sin el, la busqueda vacia las lineas lentas
+ * hacia las rapidas y deja a las primeras ociosas: baja las horas totales
+ * pero el programa sigue cerrando cuando termina la linea mas cargada, asi
+ * que no se produce ni un kilo mas. Lo que de verdad destraba la produccion
+ * es que el material que sale de una linea lo levante otra, y eso es
+ * exactamente lo que premia minimizar la linea mas cargada.
+ */
+const PESO_KG = 1000;
+const PESO_MAKESPAN = 100;
+
+/**
+ * Varias ordenes del mismo diametro que van de la misma linea a la misma.
+ * El programador no mueve rollos de uno en uno: le sirve mas leer "pasa las
+ * 13 ordenes de 17.50 mm de ITW-12 a ITW-13" que trece renglones iguales.
+ */
+class MovimientoAgrupado {
+  constructor({ origen, destino, diametroMm, ordenes, horasOrigen, horasDestino }) {
+    this.origen = origen;
+    this.destino = destino;
+    this.diametroMm = diametroMm;
+    this.ordenes = ordenes;
+    this.horasOrigen = horasOrigen;
+    this.horasDestino = horasDestino;
+  }
+
+  get kilogramos() {
+    return this.ordenes.reduce((t, o) => t + o.kilogramos, 0);
+  }
+
+  /** Horas de corrida que se ahorran. Negativo = el movimiento cuesta horas,
+   *  y se justifica por la tonelada que destraba en el origen. */
+  get horasLiberadas() {
+    return this.horasOrigen - this.horasDestino;
+  }
+
+  get folios() {
+    return this.ordenes.map((o) => o.id);
+  }
+
+  describir() {
+    const n = this.ordenes.length;
+    const plural = n === 1 ? 'orden' : 'ordenes';
+    const h = this.horasLiberadas;
+    let efecto;
+    if (h >= 0.05) efecto = `ahorra ${h.toFixed(1)} h de corrida`;
+    else if (h <= -0.05)
+      efecto = `cuesta ${Math.abs(h).toFixed(1)} h de corrida, pero destraba ${this.origen}`;
+    else efecto = 'mismo tiempo de corrida, reparte carga';
+    return (
+      `${this.origen} -> ${this.destino}: ${n} ${plural} de ` +
+      `${this.diametroMm.toFixed(2)} mm (${Math.round(this.kilogramos).toLocaleString('es-MX')} kg). ${efecto}`
+    );
+  }
+}
+
+/** Resultado completo de la busqueda. */
+class Propuesta {
+  constructor({
+    programaOriginal,
+    programaPropuesto,
+    evaluacionOriginal,
+    evaluacionPropuesta,
+    tabla,
+  }) {
+    this.programaOriginal = programaOriginal;
+    this.programaPropuesto = programaPropuesto;
+    this.evaluacionOriginal = evaluacionOriginal;
+    this.evaluacionPropuesta = evaluacionPropuesta;
+    this.tabla = tabla;
+  }
+
+  get deltaKg() {
+    return this.evaluacionPropuesta.kgProducibles - this.evaluacionOriginal.kgProducibles;
+  }
+  get deltaToneladas() {
+    return this.deltaKg / 1000;
+  }
+  get makespanOriginal() {
+    return this.evaluacionOriginal.makespan;
+  }
+  get makespanPropuesto() {
+    return this.evaluacionPropuesta.makespan;
+  }
+  get cuelloDeBotella() {
+    return this.evaluacionOriginal.lineaMasCargada;
+  }
+
+  /** Cuantas veces mas rapido cierra el programa reajustado. En el mismo
+   *  tiempo de calendario que hoy ocupa la linea mas cargada, la planta saca
+   *  este multiplo de la tonelada actual. */
+  get factorDeProduccion() {
+    return this.makespanPropuesto > 0 ? this.makespanOriginal / this.makespanPropuesto : 1;
+  }
+
+  /** Tonelada extra que cabe en el mismo calendario, al balancear. */
+  get toneladasPorBalanceo() {
+    return (this.programaOriginal.kilogramos / 1000) * (this.factorDeProduccion - 1);
+  }
+
+  get horasLiberadas() {
+    return this.evaluacionOriginal.horasRequeridas - this.evaluacionPropuesta.horasRequeridas;
+  }
+
+  /**
+   * Los cambios NETOS entre el schedule original y el propuesto.
+   *
+   * Se saca del diff de los dos schedules y no de la bitacora de jugadas: la
+   * busqueda local a veces mueve una orden y despues la regresa, y esos
+   * viajes de ida y vuelta no le sirven de nada al programador.
+   */
+  agrupadas() {
+    const destinoDe = new Map(this.programaPropuesto.ordenes.map((o) => [o.id, o.linea]));
+    const indice = new Map();
+
+    for (const orden of this.programaOriginal.ordenes) {
+      const destino = destinoDe.get(orden.id);
+      if (destino === undefined || destino === orden.linea) continue;
+      const clave = `${orden.linea}|${destino}|${orden.diametroMm}`;
+      let grupo = indice.get(clave);
+      if (!grupo) {
+        grupo = new MovimientoAgrupado({
+          origen: orden.linea,
+          destino,
+          diametroMm: orden.diametroMm,
+          ordenes: [],
+          horasOrigen: 0,
+          horasDestino: 0,
+        });
+        indice.set(clave, grupo);
+      }
+      grupo.ordenes.push(orden);
+      grupo.horasOrigen += this._horas(orden.linea, orden);
+      grupo.horasDestino += this._horas(destino, orden);
+    }
+
+    return [...indice.values()].sort(
+      (a, b) => b.horasLiberadas - a.horasLiberadas || b.kilogramos - a.kilogramos,
+    );
+  }
+
+  /** Horas de corrida de esa orden en esa linea (0 si no hay receta). */
+  _horas(linea, orden) {
+    const kgh = this.tabla.kgHora(linea, orden);
+    return kgh ? orden.kilogramos / kgh : 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Estado con evaluacion incremental
+// ---------------------------------------------------------------------------
+
+/**
+ * Asignacion linea -> secuencia de ordenes, con el valor de cada linea.
+ *
+ * De cada linea se guarda el par [kg producibles, horas requeridas]. El
+ * puntaje que se maximiza es lexicografico segun los pesos de arriba.
+ *
+ * La evaluacion es incremental: un movimiento solo toca dos lineas, asi que
+ * solo esas dos se vuelven a calcular. Sin eso, un schedule de ~500 ordenes
+ * sobre 14 lineas no termina en tiempo util. El makespan es un maximo sobre
+ * todas las lineas y no una suma, pero sale de recorrer un mapa de 15
+ * entradas, que no cuesta nada.
+ */
+class Estado {
+  constructor(programa, lineas, tabla) {
+    this.lineas = new Map(lineas.map((l) => [l.clave, l]));
+    this.tabla = tabla;
+    this.asignacion = new Map(lineas.map((l) => [l.clave, programa.deLinea(l.clave)]));
+    this.valor = new Map();
+    for (const [clave, ordenes] of this.asignacion) {
+      this.valor.set(clave, this._valor(clave, ordenes));
+    }
+  }
+
+  _valor(clave, ordenes) {
+    const r = evaluarLinea(this.lineas.get(clave), ordenes, this.tabla);
+    return [r.kgProducibles, r.horasRequeridas];
+  }
+
+  static _puntaje(valor) {
+    let kg = 0;
+    let suma = 0;
+    let max = 0;
+    for (const [k, h] of valor.values()) {
+      kg += k;
+      suma += h;
+      if (h > max) max = h;
+    }
+    return kg * PESO_KG - max * PESO_MAKESPAN - suma;
+  }
+
+  /** [puntaje, deltaKg, deltaHoras] de sustituir esas lineas. */
+  _delta(claves, nuevos) {
+    const candidato = new Map(this.valor);
+    claves.forEach((clave, i) => candidato.set(clave, this._valor(clave, nuevos[i])));
+    const puntaje = Estado._puntaje(candidato) - Estado._puntaje(this.valor);
+    let deltaKg = 0;
+    let deltaHoras = 0;
+    for (const clave of claves) {
+      deltaKg += candidato.get(clave)[0] - this.valor.get(clave)[0];
+      deltaHoras += this.valor.get(clave)[1] - candidato.get(clave)[1];
+    }
+    return [puntaje, deltaKg, deltaHoras];
+  }
+
+  deltaMover(orden, destino) {
+    const origen = orden.linea;
+    const sinOrden = this.asignacion.get(origen).filter((o) => o.id !== orden.id);
+    const conOrden = insertar(this.asignacion.get(destino), orden.moverA(destino));
+    return [this._delta([origen, destino], [sinOrden, conOrden]), new Map([[origen, sinOrden], [destino, conOrden]])];
+  }
+
+  /** Pasa de golpe todas las ordenes de un diametro a otra linea. */
+  deltaMoverBloque(ordenes, destino) {
+    const origen = ordenes[0].linea;
+    const ids = new Set(ordenes.map((o) => o.id));
+    const sinBloque = this.asignacion.get(origen).filter((o) => !ids.has(o.id));
+    let conBloque = this.asignacion.get(destino);
+    for (const orden of ordenes) conBloque = insertar(conBloque, orden.moverA(destino));
+    return [
+      this._delta([origen, destino], [sinBloque, conBloque]),
+      new Map([[origen, sinBloque], [destino, conBloque]]),
+    ];
+  }
+
+  deltaPermutar(a, b) {
+    const la = a.linea;
+    const lb = b.linea;
+    const nuevaA = insertar(this.asignacion.get(la).filter((o) => o.id !== a.id), b.moverA(la));
+    const nuevaB = insertar(this.asignacion.get(lb).filter((o) => o.id !== b.id), a.moverA(lb));
+    return [this._delta([la, lb], [nuevaA, nuevaB]), new Map([[la, nuevaA], [lb, nuevaB]])];
+  }
+
+  /** Las ordenes movibles de cada linea, agrupadas por diametro. */
+  bloques() {
+    const grupos = [];
+    for (const ordenes of this.asignacion.values()) {
+      const porDiametro = new Map();
+      for (const orden of ordenes) {
+        if (orden.fijo) continue;
+        if (!porDiametro.has(orden.diametroMm)) porDiametro.set(orden.diametroMm, []);
+        porDiametro.get(orden.diametroMm).push(orden);
+      }
+      grupos.push(...porDiametro.values());
+    }
+    return grupos;
+  }
+
+  /** Lineas que no alcanzan a sacar todo lo que tienen programado. */
+  saturadas() {
+    const saturadas = new Set();
+    for (const [clave, ordenes] of this.asignacion) {
+      const r = evaluarLinea(this.lineas.get(clave), ordenes, this.tabla);
+      if (r.horasSobregiro > 0 || r.sinReceta.length) saturadas.add(clave);
+    }
+    return saturadas;
+  }
+
+  aplicar(clave, ordenes) {
+    this.asignacion.set(clave, resecuenciar(ordenes));
+    this.valor.set(clave, this._valor(clave, this.asignacion.get(clave)));
+  }
+
+  aPrograma(programa) {
+    return programa.reemplazar([...this.asignacion.values()].flat());
+  }
+}
+
+/** Mete la orden junto a las del mismo diametro para no pagar un cambio de
+ *  medida de mas; si no hay, la deja al final. */
+function insertar(ordenes, nueva) {
+  let posicion = ordenes.length;
+  for (let i = ordenes.length - 1; i >= 0; i--) {
+    if (ordenes[i].diametroMm === nueva.diametroMm) {
+      posicion = i + 1;
+      break;
+    }
+  }
+  return [...ordenes.slice(0, posicion), nueva, ...ordenes.slice(posicion)];
+}
+
+function resecuenciar(ordenes) {
+  return ordenes.map((o, i) => o.moverA(o.linea, i + 1));
+}
+
+// ---------------------------------------------------------------------------
+// Busqueda
+// ---------------------------------------------------------------------------
+
+/** Busca reasignaciones de ordenes que aumenten la produccion del horizonte. */
+function buscarOportunidades(
+  programa,
+  lineas,
+  tabla,
+  { maxMovimientos = 400, permitirPermutas = true, umbralKg = UMBRAL_KG, umbralHoras = UMBRAL_HORAS } = {},
+) {
+  const evaluacionInicial = evaluarPrograma(programa, lineas, tabla);
+  const estado = new Estado(programa, lineas, tabla);
+  const destinosValidos = new Set(lineas.filter((l) => l.activa).map((l) => l.clave));
+
+  for (let i = 0; i < maxMovimientos; i++) {
+    const mejor = mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPermutas);
+    if (!mejor) break;
+    for (const [clave, ordenes] of mejor) estado.aplicar(clave, ordenes);
+  }
+
+  const propuesto = estado.aPrograma(programa);
+  return new Propuesta({
+    programaOriginal: programa,
+    programaPropuesto: propuesto,
+    evaluacionOriginal: evaluacionInicial,
+    evaluacionPropuesta: evaluarPrograma(propuesto, lineas, tabla),
+    tabla,
+  });
+}
+
+/** La jugada que mas sube el puntaje, o null si ninguna vale la pena. */
+function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPermutas) {
+  let mejorPuntaje = Math.min(umbralKg * PESO_KG, umbralHoras);
+  let mejor = null;
+
+  const movibles = [...estado.asignacion.values()].flat().filter((o) => !o.fijo);
+
+  // Jugada 1: mover de golpe todas las ordenes de un diametro.
+  for (const bloque of estado.bloques()) {
+    if (bloque.length < 2) continue; // de una sola se encarga la jugada 2
+    for (const destino of estado.tabla.lineasPara(bloque[0])) {
+      if (destino === bloque[0].linea || !destinosValidos.has(destino)) continue;
+      const [[puntaje], cambios] = estado.deltaMoverBloque(bloque, destino);
+      if (puntaje > mejorPuntaje) {
+        mejorPuntaje = puntaje;
+        mejor = cambios;
+      }
+    }
+  }
+
+  // Jugada 2: mover una sola orden.
+  for (const orden of movibles) {
+    for (const destino of estado.tabla.lineasPara(orden)) {
+      if (destino === orden.linea || !destinosValidos.has(destino)) continue;
+      const [[puntaje], cambios] = estado.deltaMover(orden, destino);
+      if (puntaje > mejorPuntaje) {
+        mejorPuntaje = puntaje;
+        mejor = cambios;
+      }
+    }
+  }
+
+  // Jugada 3: permutar dos ordenes. Solo se explora desde las lineas
+  // saturadas, que es donde estan los kilos que se quedan fuera del
+  // horizonte; barrer todos los pares seria cuadratico sobre ~500 ordenes.
+  if (permitirPermutas) {
+    const saturadas = estado.saturadas();
+    if (saturadas.size) {
+      for (const a of movibles.filter((o) => saturadas.has(o.linea))) {
+        for (const b of movibles) {
+          if (a.linea === b.linea || a.id === b.id) continue;
+          if (a.diametroMm === b.diametroMm) continue; // permutar iguales no cambia nada
+          if (!estado.tabla.puedeCorrer(b.linea, a)) continue;
+          if (!estado.tabla.puedeCorrer(a.linea, b)) continue;
+          const [[puntaje], cambios] = estado.deltaPermutar(a, b);
+          if (puntaje > mejorPuntaje) {
+            mejorPuntaje = puntaje;
+            mejor = cambios;
+          }
+        }
+      }
+    }
+  }
+
+  return mejor;
+}
+
+// ===== src/ingesta/comun.js ==========================================
+
+/** Utilidades compartidas por los dos lectores de Excel. */
+
+/**
+ * Valor plano de una celda de exceljs.
+ * Las celdas pueden venir como numero, texto, texto enriquecido, formula con
+ * resultado, o error (#REF!). Aqui se aplanan todas a numero, texto o null.
+ */
+function valorCelda(celda) {
+  const v = celda?.value;
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number' || typeof v === 'string') return v;
+  if (v instanceof Date) return v;
+  if (typeof v === 'object') {
+    if ('error' in v) return null; // #REF!, #VALUE!, ...
+    if ('result' in v) return v.result ?? null; // formula evaluada
+    if ('richText' in v) return v.richText.map((t) => t.text).join('');
+    if ('text' in v) return v.text;
+  }
+  return null;
+}
+
+function numero(valor) {
+  if (valor === null || valor === undefined || valor === '') return null;
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
+  const texto = String(valor).trim().replace(/,/g, '');
+  const n = Number(texto);
+  return Number.isFinite(n) ? n : null;
+}
+
+function texto(valor) {
+  if (valor === null || valor === undefined) return '';
+  const t = String(valor).trim();
+  return t.toLowerCase() === 'nan' ? '' : t;
+}
+
+// ===== src/ingesta/hoja.js ===========================================
+
+/**
+ * La forma en que los parsers ven una hoja de Excel, sea quien sea que la
+ * haya leido.
+ *
+ *   { nombres, hoja, filas: Map<numeroFila, Map<numeroColumna, valor>> }
+ *
+ * Hay dos lectores: exceljs del lado del servidor (ingesta/excel.js) y el
+ * propio de xlsx/lector.js para el modulo demo, que corre en el navegador
+ * sin dependencias. Los dos producen esta misma forma, asi que la
+ * interpretacion del WI y del schedule se escribe UNA vez y sirve en los dos
+ * lados.
+ *
+ * Este archivo no importa nada a proposito: se inlinea tal cual en el HTML
+ * del demo.
+ */
+
+/** Valor de una celda, o null. */
+function celda(filas, numeroFila, numeroColumna) {
+  return filas.get(numeroFila)?.get(numeroColumna) ?? null;
+}
+
+/** Los numeros de fila presentes, en orden. */
+function numerosDeFila(filas) {
+  return [...filas.keys()].sort((a, b) => a - b);
+}
+
+// ===== src/ingesta/parametros.js =====================================
+
+/**
+ * Lector del WI-FLO-CSW-P-526 "ITW Process Parameters".
+ *
+ * De ese documento solo interesa la tabla "ITW Line Speed [mm/s]": el
+ * diametro de alambre estirado en la columna A y la velocidad de cada linea
+ * en las columnas C..P.
+ *
+ * La tabla viene partida en varios bloques (por el salto de pagina del
+ * documento) pero el acomodo de columnas se repite identico en todos, asi
+ * que se recorre la hoja completa y se toma cualquier renglon cuya columna A
+ * sea numerica y caiga en el rango plausible de diametro.
+ *
+ * Acomodo de columnas (confirmado en los 8 bloques del documento):
+ *
+ *     C   ITW-2   devanador Neturen
+ *     D   ITW-2   devanador DEM, grado 9254
+ *     E   ITW-2   devanador DEM, grado 1065
+ *     F   ITW-3
+ *     G   ITW-5 y ITW-6
+ *     H   ITW-1
+ *     I   ITW-7, ITW-8 y ITW-9
+ *     J   ITW-10  NON SLM
+ *     K   ITW-10  SLM
+ *     L   ITW-4
+ *     M   ITW-11
+ *     N   ITW-12
+ *     O   ITW-13
+ *     P   ITW-14
+ */
+
+
+
+
+const HOJA_WI = 'Anlagen - Setup ';
+
+/** columna -> { lineas, winder, grado, slm } */
+const COLUMNAS = new Map([
+  [3, { lineas: ['ITW-2'], winder: 'NETUREN', grado: null, slm: null }],
+  [4, { lineas: ['ITW-2'], winder: 'DEM', grado: '9254', slm: null }],
+  [5, { lineas: ['ITW-2'], winder: 'DEM', grado: '1065', slm: null }],
+  [6, { lineas: ['ITW-3'], winder: null, grado: null, slm: null }],
+  [7, { lineas: ['ITW-5', 'ITW-6'], winder: null, grado: null, slm: null }],
+  [8, { lineas: ['ITW-1'], winder: null, grado: null, slm: null }],
+  [9, { lineas: ['ITW-7', 'ITW-8', 'ITW-9'], winder: null, grado: null, slm: null }],
+  [10, { lineas: ['ITW-10'], winder: null, grado: null, slm: false }],
+  [11, { lineas: ['ITW-10'], winder: null, grado: null, slm: true }],
+  [12, { lineas: ['ITW-4'], winder: null, grado: null, slm: null }],
+  [13, { lineas: ['ITW-11'], winder: null, grado: null, slm: null }],
+  [14, { lineas: ['ITW-12'], winder: null, grado: null, slm: null }],
+  [15, { lineas: ['ITW-13'], winder: null, grado: null, slm: null }],
+  [16, { lineas: ['ITW-14'], winder: null, grado: null, slm: null }],
+]);
+
+/** El diametro de la columna A trae ruido de punto flotante (6.25000000000001). */
+const DECIMALES_DIAMETRO = 2;
+
+
+/**
+ * Interpreta una hoja ya leida.
+ *
+ * Es puro: no sabe de archivos ni de exceljs, asi que corre igual en el
+ * servidor y en el navegador. Ver ingesta/hoja.js.
+ */
+function interpretarVelocidades({ filas }) {
+  const puntos = [];
+
+  for (const numeroFila of numerosDeFila(filas)) {
+    const bruto = celda(filas, numeroFila, 1);
+    if (typeof bruto !== 'number') continue;
+    const diametroMm = redondear(bruto, DECIMALES_DIAMETRO);
+    if (diametroMm < DIAMETRO_MIN || diametroMm > DIAMETRO_MAX) continue;
+
+    for (const [columna, { lineas, winder, grado, slm }] of COLUMNAS) {
+      const velocidad = celda(filas, numeroFila, columna);
+      // Celda vacia = esa linea no corre ese diametro.
+      if (typeof velocidad !== 'number' || velocidad <= 0) continue;
+      for (const linea of lineas) {
+        puntos.push(new PuntoVelocidad({ linea, diametroMm, mmS: velocidad, winder, grado, slm }));
+      }
+    }
+  }
+
+  if (!puntos.length) {
+    throw new Error(
+      'no se encontro ninguna velocidad en el WI; revisa que la hoja sea la del ITW Line Speed',
+    );
+  }
+  return puntos;
+}
+
+// ===== src/ingesta/schedule.js =======================================
+
+/**
+ * Lector del production schedule (Schedule_8200_<fecha>.xlsx).
+ *
+ * La hoja "Sheet1" trae el volcado de SAP: una orden por renglon, ya
+ * asignada a un work center (BB001..BB014 = ITW-1..ITW-14).
+ *
+ *   Work Center | Material Number | Material Description | Important Notes
+ *   Order | PO Printed | Drawn | Operation Quantity (MEINH) | Customer PO
+ *
+ * El diametro no viene en columna propia: va dentro de la descripcion
+ * ("CSW,14.70mm HT HT 1950-2000 MPa", "CSW, 7,92 1450-1610 SAE1065 half SID"),
+ * con coma o punto decimal. De ahi se saca tambien el grado y la marca SLM.
+ *
+ * Cada bloque de work center cierra con un renglon de subtotal (material
+ * "nan" y orden "0") y el archivo cierra con el gran total; ambos se ignoran.
+ *
+ * La hoja HEATLINE_SCHEDULE (el tablero visual por turnos) no se lee: viene
+ * con formulas rotas (#REF!) y la asignacion completa ya esta en Sheet1.
+ */
+
+
+
+
+const HOJA_SCHEDULE = 'Sheet1';
+const FILA_ENCABEZADOS = 2;
+
+/** Diametro dentro de la descripcion: 1 o 2 enteros y 1 o 2 decimales. */
+const RE_DIAMETRO = /(\d{1,2}[.,]\d{1,2})\s*(?:mm)?/gi;
+
+
+/** encabezado normalizado -> campo */
+const ALIAS = new Map([
+  ['work center', 'workCenter'],
+  ['material number', 'material'],
+  ['material description', 'descripcion'],
+  ['important notes', 'notas'],
+  ['order', 'orden'],
+  ['operation quantity (meinh)', 'cantidad'],
+  ['customer po', 'clientePo'],
+]);
+
+const OBLIGATORIAS = ['workCenter', 'descripcion', 'cantidad'];
+
+// --------------------------------------------------------------------------
+// Interpretacion de la descripcion del material
+// --------------------------------------------------------------------------
+
+/** Primer numero de la descripcion que sea un diametro plausible. */
+function diametroDe(descripcion) {
+  for (const m of String(descripcion).matchAll(RE_DIAMETRO)) {
+    const valor = Number(m[1].replace(',', '.'));
+    if (valor >= DIAMETRO_MIN && valor <= DIAMETRO_MAX) return Math.round(valor * 100) / 100;
+  }
+  return null;
+}
+
+/** Grupo de grado tal como lo discrimina el WI: "1065" o "9254". */
+function gradoDe(descripcion) {
+  return String(descripcion).toUpperCase().includes('1065') ? '1065' : '9254';
+}
+
+/** SLM (Super Low Modulus) cambia la receta de ITW-10. */
+function esSlm(descripcion) {
+  return /\bSLM\b/.test(String(descripcion).toUpperCase());
+}
+
+/**
+ * Devanador que indica el schedule, o null si no dice nada.
+ *
+ * El WI pide que se anote el DEM en notas. Se lee tambien el Neturen para
+ * que se pueda registrar la excepcion al deber ser, que es el DEM.
+ *
+ * null NO significa Neturen: significa "no lo anotaron". Quien decide que
+ * hacer con eso es la tabla de recetas (asume el deber ser) y el analisis
+ * (levanta el aviso).
+ */
+function winderDe(txt) {
+  const T = String(txt).toUpperCase();
+  if (/\bDEM\b/.test(T)) return 'DEM';
+  if (/\bNETUREN\b/.test(T)) return 'NETUREN';
+  return null;
+}
+
+// --------------------------------------------------------------------------
+// Lectura
+// --------------------------------------------------------------------------
+
+function mapearColumnas(filas) {
+  const columnas = new Map();
+  for (const [numeroColumna, valor] of filas.get(FILA_ENCABEZADOS) ?? new Map()) {
+    const encabezado = texto(valor).toLowerCase();
+    if (ALIAS.has(encabezado)) columnas.set(ALIAS.get(encabezado), numeroColumna);
+  }
+  const faltantes = OBLIGATORIAS.filter((c) => !columnas.has(c));
+  if (faltantes.length) {
+    throw new Error(`al schedule le faltan columnas obligatorias: ${faltantes.join(', ')}`);
+  }
+  return columnas;
+}
+
+/**
+ * Interpreta una hoja ya leida.
+ *
+ * Es puro: no sabe de archivos ni de exceljs, asi que corre igual en el
+ * servidor y en el navegador. Ver ingesta/hoja.js.
+ */
+function interpretarPrograma({ filas }, horizonte = '') {
+  const columnas = mapearColumnas(filas);
+  const leer = (numeroFila, campo) =>
+    columnas.has(campo) ? celda(filas, numeroFila, columnas.get(campo)) : null;
+
+  const ordenes = [];
+  const secuencias = new Map();
+
+  for (const numeroFila of numerosDeFila(filas)) {
+    if (numeroFila <= FILA_ENCABEZADOS) continue;
+
+    const workCenter = texto(leer(numeroFila, 'workCenter'));
+    const descripcion = texto(leer(numeroFila, 'descripcion'));
+    const cantidad = numero(leer(numeroFila, 'cantidad'));
+
+    // Renglones de subtotal y gran total.
+    if (!workCenter || !descripcion || !cantidad || cantidad <= 0) continue;
+
+    const diametroMm = diametroDe(descripcion);
+    if (diametroMm === null) continue;
+
+    const linea = workCenterALinea(workCenter);
+    const secuencia = (secuencias.get(linea) ?? 0) + 1;
+    secuencias.set(linea, secuencia);
+    const notas = texto(leer(numeroFila, 'notas'));
+
+    ordenes.push(
+      new Orden({
+        id: texto(leer(numeroFila, 'orden')) || `${linea}-${String(secuencia).padStart(3, '0')}`,
+        diametroMm,
+        kilogramos: cantidad,
+        linea,
+        material: texto(leer(numeroFila, 'material')),
+        descripcion,
+        grupoGrado: gradoDe(descripcion),
+        slm: esSlm(descripcion),
+        winder: winderDe(`${descripcion} ${notas}`),
+        secuencia,
+        notas,
+        clientePo: texto(leer(numeroFila, 'clientePo')),
+      }),
+    );
+  }
+
+  if (!ordenes.length) {
+    throw new Error('no se leyo ninguna orden del schedule; revisa la hoja y los encabezados');
+  }
+  return new Programa(ordenes, horizonte);
+}
+
+// ===== src/xlsx/lector.js ============================================
+
+/**
+ * Lector de .xlsx sin dependencias.
+ *
+ * Un .xlsx es un ZIP con XML adentro. Para el modulo demo, que corre como un
+ * solo archivo HTML en el navegador, no se puede depender de una libreria de
+ * CDN: en la red de planta suele estar bloqueada. Aqui se descomprime con
+ * DecompressionStream, que ya trae el navegador (y Node 18+), y se parsea el
+ * XML con DOMParser.
+ *
+ * Solo lee lo que este modulo necesita: valores de celda de una hoja. No
+ * entiende estilos, formulas, fechas ni ZIP64 — para eso esta exceljs del
+ * lado del servidor.
+ */
+
+const FIRMA_EOCD = 0x06054b50;
+const FIRMA_CENTRAL = 0x02014b50;
+const FIRMA_LOCAL = 0x04034b50;
+
+/** Abre el ZIP y devuelve un mapa nombre -> Uint8Array con los bytes crudos. */
+async function abrirZip(buffer) {
+  const datos = new Uint8Array(buffer);
+  const vista = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
+
+  const eocd = buscarEocd(vista, datos.length);
+  if (eocd === -1) throw new Error('el archivo no parece un .xlsx (no se encontro el fin del ZIP)');
+
+  const entradas = vista.getUint16(eocd + 10, true);
+  let cursor = vista.getUint32(eocd + 16, true);
+  const archivos = new Map();
+
+  for (let i = 0; i < entradas; i++) {
+    if (vista.getUint32(cursor, true) !== FIRMA_CENTRAL) break;
+    const metodo = vista.getUint16(cursor + 10, true);
+    const comprimido = vista.getUint32(cursor + 20, true);
+    const largoNombre = vista.getUint16(cursor + 28, true);
+    const largoExtra = vista.getUint16(cursor + 30, true);
+    const largoComentario = vista.getUint16(cursor + 32, true);
+    const offsetLocal = vista.getUint32(cursor + 42, true);
+    const nombre = new TextDecoder().decode(datos.subarray(cursor + 46, cursor + 46 + largoNombre));
+
+    if (comprimido === 0xffffffff || offsetLocal === 0xffffffff) {
+      throw new Error('el .xlsx usa ZIP64, que este lector no soporta');
+    }
+    archivos.set(nombre, { metodo, comprimido, offsetLocal });
+    cursor += 46 + largoNombre + largoExtra + largoComentario;
+  }
+
+  const resultado = new Map();
+  for (const [nombre, e] of archivos) {
+    if (vista.getUint32(e.offsetLocal, true) !== FIRMA_LOCAL) continue;
+    // El encabezado local repite los largos y puede diferir del central.
+    const largoNombre = vista.getUint16(e.offsetLocal + 26, true);
+    const largoExtra = vista.getUint16(e.offsetLocal + 28, true);
+    const inicio = e.offsetLocal + 30 + largoNombre + largoExtra;
+    const crudo = datos.subarray(inicio, inicio + e.comprimido);
+    resultado.set(nombre, e.metodo === 0 ? crudo : await inflar(crudo));
+  }
+  return resultado;
+}
+
+/** El EOCD vive al final, pero puede traer comentario: se busca hacia atras. */
+function buscarEocd(vista, largo) {
+  const minimo = Math.max(0, largo - 0xffff - 22);
+  for (let i = largo - 22; i >= minimo; i--) {
+    if (vista.getUint32(i, true) === FIRMA_EOCD) return i;
+  }
+  return -1;
+}
+
+async function inflar(bytes) {
+  const flujo = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(flujo).arrayBuffer());
+}
+
+/** Bytes -> string. Se llama asi y no 'texto' porque ingesta/comun.js ya
+ *  usa ese nombre para otra cosa, y los dos se inlinean juntos en el demo. */
+function decodificar(bytes) {
+  return new TextDecoder().decode(bytes);
+}
+
+/** DOMParser en el navegador; en Node se inyecta uno equivalente. */
+let parsear = (xml) => new DOMParser().parseFromString(xml, 'application/xml');
+
+function usarParser(fn) {
+  parsear = fn;
+}
+
+/** 'BC' -> 54 (1-based, igual que exceljs). */
+function columnaANumero(letras) {
+  let n = 0;
+  for (const c of letras) n = n * 26 + (c.charCodeAt(0) - 64);
+  return n;
+}
+
+/**
+ * Lee una hoja y devuelve sus filas como arreglos indexados por columna.
+ *
+ * @returns {{nombres: string[], filas: Map<number, Map<number, string|number>>}}
+ */
+async function leerHoja(buffer, nombreHoja = null) {
+  const zip = await abrirZip(buffer);
+
+  const libro = parsear(decodificar(zip.get('xl/workbook.xml')));
+  const rels = parsear(decodificar(zip.get('xl/_rels/workbook.xml.rels')));
+
+  const destinos = new Map();
+  for (const r of rels.getElementsByTagName('Relationship')) {
+    destinos.set(r.getAttribute('Id'), r.getAttribute('Target').replace(/^\/?xl\//, ''));
+  }
+
+  const hojas = [...libro.getElementsByTagName('sheet')].map((s) => ({
+    nombre: s.getAttribute('name'),
+    ruta: destinos.get(s.getAttribute('r:id') ?? s.getAttributeNS?.(
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id',
+    )),
+  }));
+  const nombres = hojas.map((h) => h.nombre);
+
+  const elegida = nombreHoja
+    ? hojas.find((h) => h.nombre === nombreHoja || h.nombre.trim() === nombreHoja.trim())
+    : hojas[0];
+  if (!elegida) throw new Error(`el archivo no tiene la hoja "${nombreHoja}"`);
+
+  const compartidas = leerCompartidas(zip, parsear);
+  const xml = zip.get(`xl/${elegida.ruta}`);
+  if (!xml) throw new Error(`no se encontro la hoja ${elegida.nombre} dentro del archivo`);
+
+  const doc = parsear(decodificar(xml));
+  const filas = new Map();
+
+  for (const fila of doc.getElementsByTagName('row')) {
+    const numeroFila = Number(fila.getAttribute('r'));
+    const celdas = new Map();
+    for (const celda of fila.getElementsByTagName('c')) {
+      const ref = celda.getAttribute('r') ?? '';
+      const columna = columnaANumero(ref.replace(/\d+/g, ''));
+      const valor = valorDeCelda(celda, compartidas);
+      if (valor !== null) celdas.set(columna, valor);
+    }
+    if (celdas.size) filas.set(numeroFila, celdas);
+  }
+
+  propagarCombinadas(doc, filas);
+  return { nombres, hoja: elegida.nombre, filas };
+}
+
+/**
+ * En una celda combinada el valor vive solo en la esquina superior izquierda;
+ * el resto del rango esta vacio en el archivo. Se copia a todo el rango para
+ * que el lector se comporte igual que exceljs del lado del servidor: si los
+ * dos entornos no ven lo mismo, un parser que funciona en uno falla en el
+ * otro y cuesta mucho darse cuenta.
+ */
+function propagarCombinadas(doc, filas) {
+  for (const m of doc.getElementsByTagName('mergeCell')) {
+    const rango = m.getAttribute('ref') ?? '';
+    const [desde, hasta] = rango.split(':');
+    if (!desde || !hasta) continue;
+
+    const f1 = Number(desde.replace(/\D/g, ''));
+    const f2 = Number(hasta.replace(/\D/g, ''));
+    const c1 = columnaANumero(desde.replace(/\d+/g, ''));
+    const c2 = columnaANumero(hasta.replace(/\d+/g, ''));
+
+    const ancla = filas.get(f1)?.get(c1);
+    if (ancla === undefined) continue;
+
+    for (let f = f1; f <= f2; f++) {
+      if (!filas.has(f)) filas.set(f, new Map());
+      const celdas = filas.get(f);
+      for (let c = c1; c <= c2; c++) if (!celdas.has(c)) celdas.set(c, ancla);
+    }
+  }
+}
+
+function leerCompartidas(zip, parsear) {
+  const bytes = zip.get('xl/sharedStrings.xml');
+  if (!bytes) return [];
+  const doc = parsear(decodificar(bytes));
+  return [...doc.getElementsByTagName('si')].map((si) =>
+    [...si.getElementsByTagName('t')].map((t) => t.textContent).join(''),
+  );
+}
+
+function valorDeCelda(celda, compartidas) {
+  const tipo = celda.getAttribute('t');
+  if (tipo === 'inlineStr') {
+    const is = celda.getElementsByTagName('is')[0];
+    return is ? [...is.getElementsByTagName('t')].map((t) => t.textContent).join('') : null;
+  }
+  const v = celda.getElementsByTagName('v')[0];
+  if (!v) return null;
+  const bruto = v.textContent;
+  if (tipo === 's') return compartidas[Number(bruto)] ?? null;
+  if (tipo === 'e') return null; // #REF!, #VALUE!, ...
+  if (tipo === 'str') return bruto;
+  if (tipo === 'b') return bruto === '1';
+  const n = Number(bruto);
+  return Number.isFinite(n) ? n : bruto;
+}
+
+// ===== src/servicio/avisos.js ========================================
+
+/**
+ * Avisos del analisis: lo que el programador tiene que saber del archivo que
+ * subio, aunque no impida calcular.
+ *
+ * Cada aviso trae su impacto cuantificado. Un aviso que solo dice "ojo con
+ * esto" se ignora a la tercera vez; uno que dice "esto te cuesta 35 horas de
+ * cierre" se atiende.
+ */
+
+
+
+
+/**
+ * Ordenes que corren en una linea cuya receta depende del devanador, pero
+ * cuyo schedule no anoto cual se uso.
+ *
+ * Se calcularon con el deber ser (DEM). El aviso dice cuanto se recorreria
+ * el cierre del programa si en realidad hubieran corrido con el otro.
+ */
+function avisoDevanador(programa, lineas, tabla, evaluacion) {
+  const dependeDelDevanador = new Set(
+    tabla.puntos.filter((p) => p.winder !== null).map((p) => p.linea),
+  );
+
+  const sinAnotar = programa.ordenes.filter(
+    (o) => o.winder === null && dependeDelDevanador.has(o.linea),
+  );
+  if (!sinAnotar.length) return null;
+
+  // Que pasaria si de verdad hubieran corrido con el otro devanador.
+  const ids = new Set(sinAnotar.map((o) => o.id));
+  const alterno = programa.reemplazar(
+    programa.ordenes.map((o) => (ids.has(o.id) ? new Orden({ ...o, winder: WINDER_ALTERNO }) : o)),
+  );
+  const evAlterno = evaluarPrograma(alterno, lineas, tabla);
+
+  const porLinea = new Map();
+  for (const o of sinAnotar) {
+    const g = porLinea.get(o.linea) ?? { ordenes: 0, kilogramos: 0 };
+    g.ordenes += 1;
+    g.kilogramos += o.kilogramos;
+    porLinea.set(o.linea, g);
+  }
+
+  return {
+    tipo: 'devanador_no_indicado',
+    severidad: 'nota',
+    ordenes: sinAnotar.length,
+    kilogramos: Math.round(sinAnotar.reduce((t, o) => t + o.kilogramos, 0)),
+    asumido: WINDER_PREDETERMINADO,
+    alterno: WINDER_ALTERNO,
+    lineas: [...porLinea].map(([linea, g]) => ({ linea, ...g })),
+    folios: sinAnotar.slice(0, 20).map((o) => o.id),
+    cierreAsumido: redondear(evaluacion.makespan, 2),
+    cierreSiAlterno: redondear(evAlterno.makespan, 2),
+    horasDeMas: redondear(evAlterno.horasRequeridas - evaluacion.horasRequeridas, 2),
+    mensaje:
+      `${sinAnotar.length} órdenes no traen anotado el devanador en las notas del schedule. ` +
+      `Se calcularon con ${WINDER_PREDETERMINADO}, que es el deber ser. ` +
+      `Si en realidad corrieron con ${WINDER_ALTERNO}, el programa no cierra en ` +
+      `${redondear(evaluacion.makespan, 1)} h sino en ${redondear(evAlterno.makespan, 1)} h.`,
+  };
+}
+
+/** Ordenes programadas en una linea que no tiene receta para ese diametro. */
+function avisoSinReceta(evaluacion) {
+  const sinReceta = evaluacion.sinReceta;
+  if (!sinReceta.length) return null;
+  return {
+    tipo: 'sin_receta',
+    severidad: 'error',
+    ordenes: sinReceta.length,
+    kilogramos: Math.round(sinReceta.reduce((t, o) => t + o.kilogramos, 0)),
+    detalle: sinReceta.map((o) => ({
+      orden: o.id,
+      linea: o.linea,
+      diametroMm: o.diametroMm,
+      kilogramos: o.kilogramos,
+    })),
+    mensaje:
+      `${sinReceta.length} órdenes están en una línea que no tiene receta para ese diámetro. ` +
+      'No se les puede calcular tiempo ni rendimiento, así que quedan fuera de todos los totales.',
+  };
+}
+
+/** Todos los avisos aplicables, de mayor a menor severidad. */
+function reunirAvisos(programa, lineas, tabla, evaluacion) {
+  const orden = { error: 0, nota: 1 };
+  return [avisoSinReceta(evaluacion), avisoDevanador(programa, lineas, tabla, evaluacion)]
+    .filter(Boolean)
+    .sort((a, b) => orden[a.severidad] - orden[b.severidad]);
+}
+
+// ===== src/servicio/analisis.js ======================================
+
+/**
+ * El servicio: junta las recetas, el schedule y el algoritmo, y arma el
+ * paquete que consume la pantalla de programacion.
+ */
+
+
+
+
+
+
+
+/** Las 14 lineas instaladas mas ITW-15, que esta por instalarse. */
+const LINEAS_INSTALADAS = Array.from({ length: 14 }, (_, i) => `ITW-${i + 1}`);
+const LINEA_POR_INSTALAR = 'ITW-15';
+
+/** Supuestos por omision. El servidor los sobreescribe con su configuracion
+ *  y el modulo demo los usa tal cual. Ver docs/SUPUESTOS.md. */
+const SUPUESTOS = {
+  horasDisponibles: 144,
+  eficiencia: 1,
+  minutosCambio: 45,
+  maxMovimientos: 400,
+};
+
+function catalogoLineas({
+  horasDisponibles = SUPUESTOS.horasDisponibles,
+  eficiencia = SUPUESTOS.eficiencia,
+  minutosCambio = SUPUESTOS.minutosCambio,
+  itw15Activa = false,
+} = {}) {
+  const lineas = LINEAS_INSTALADAS.map(
+    (clave) => new Linea({ clave, horasDisponibles, eficiencia, minutosCambio }),
+  );
+  lineas.push(
+    new Linea({
+      clave: LINEA_POR_INSTALAR,
+      horasDisponibles,
+      eficiencia,
+      minutosCambio,
+      activa: itw15Activa,
+    }),
+  );
+  return lineas;
+}
+
+/** Recetas guardadas -> objetos del motor. */
+function puntosDesdeFilas(filas) {
+  return filas.map((f) => new PuntoVelocidad(f));
+}
+
+/**
+ * Corre el analisis completo de un schedule ya leido.
+ *
+ * Recibe el programa, no el archivo: asi el mismo servicio sirve al servidor
+ * (que lee con exceljs) y al modulo demo (que lee en el navegador).
+ *
+ * @param {Programa} programa  las ordenes del schedule
+ * @param {PuntoVelocidad[]} puntos  las recetas del WI
+ * @param {object} supuestos  horas, eficiencia, minutos de cambio
+ */
+function analizar(programa, puntos, supuestos = {}) {
+  const lineas = catalogoLineas(supuestos);
+  const tabla = new TablaVelocidades(puntos, lineas);
+
+  const desconocidas = programa.lineasUsadas().filter(
+    (l) => !lineas.some((x) => x.clave === l),
+  );
+  if (desconocidas.length) {
+    throw new ErrorDeDatos(
+      `el schedule trae work centers que no corresponden a ninguna linea ITW: ${desconocidas.join(', ')}`,
+    );
+  }
+
+  const evaluacion = evaluarPrograma(programa, lineas, tabla);
+  const propuesta = buscarOportunidades(programa, lineas, tabla, {
+    maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
+  });
+
+  return { programa, lineas, tabla, evaluacion, propuesta };
+}
+
+/** Error de datos del archivo, no del servidor: se responde 400, no 500. */
+class ErrorDeDatos extends Error {}
+
+/**
+ * Arma el JSON que pinta la pantalla.
+ *
+ * Es deliberadamente "plano": la pantalla no vuelve a calcular nada, solo
+ * dibuja. Asi el mismo paquete se puede guardar en flo_analisis y volver a
+ * pintar identico meses despues.
+ */
+function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evaluacion, propuesta, supuestos }) {
+  const ev2 = propuesta.evaluacionPropuesta;
+  const lineaPropuestaDe = new Map(propuesta.programaPropuesto.ordenes.map((o) => [o.id, o.linea]));
+
+  const detalleLineas = lineas.map((l) => {
+    const a = evaluacion.lineas.get(l.clave);
+    const b = ev2.lineas.get(l.clave);
+    return {
+      linea: l.clave,
+      workCenter: lineaAWorkCenter(l.clave),
+      activa: l.activa,
+      horasDisponibles: l.horasDisponibles,
+      actual: resumenLinea(a),
+      propuesto: resumenLinea(b),
+      corridas: a.corridas.map((c) => ({
+        orden: c.orden.id,
+        diametroMm: c.orden.diametroMm,
+        kilogramos: c.orden.kilogramos,
+        descripcion: c.orden.descripcion,
+        kgHora: c.kgHora === null ? null : redondear(c.kgHora, 1),
+        horas: redondear(c.horasProduccion, 2),
+        horasCambio: redondear(c.horasCambio, 2),
+        sinReceta: c.sinReceta,
+        lineaPropuesta: lineaPropuestaDe.get(c.orden.id) ?? l.clave,
+        movida: (lineaPropuestaDe.get(c.orden.id) ?? l.clave) !== l.clave,
+      })),
+    };
+  });
+
+  const movimientos = propuesta.agrupadas().map((g, i) => ({
+    id: i + 1,
+    origen: g.origen,
+    destino: g.destino,
+    diametroMm: g.diametroMm,
+    ordenes: g.ordenes.length,
+    kilogramos: redondear(g.kilogramos, 0),
+    horasOrigen: redondear(g.horasOrigen, 2),
+    horasDestino: redondear(g.horasDestino, 2),
+    horasLiberadas: redondear(g.horasLiberadas, 2),
+    folios: g.folios,
+    consejo: g.describir(),
+    aceptado: null,
+  }));
+
+  return {
+    folio,
+    archivo,
+    cargadoPor: cargadoPor ?? null,
+    cargadoEn: new Date().toISOString(),
+    ordenes: programa.length,
+    kilogramos: redondear(programa.kilogramos, 0),
+    supuestos,
+    recetas: tabla.size,
+    analisis: {
+      supuestos,
+      makespanActual: redondear(propuesta.makespanOriginal, 2),
+      makespanPropuesto: redondear(propuesta.makespanPropuesto, 2),
+      cuelloDeBotella: propuesta.cuelloDeBotella,
+      horasTotalesActual: redondear(evaluacion.horasRequeridas, 2),
+      horasTotalesPropuesto: redondear(ev2.horasRequeridas, 2),
+      factorProduccion: redondear(propuesta.factorDeProduccion, 3),
+      toneladasActuales: redondear(programa.kilogramos / 1000, 1),
+      toneladasIncremento: redondear(propuesta.toneladasPorBalanceo, 1),
+      toneladasDentroDelHorizonte: redondear(propuesta.deltaToneladas, 2),
+      ordenesMovidas: movimientos.reduce((t, m) => t + m.ordenes, 0),
+      avisos: reunirAvisos(programa, lineas, tabla, evaluacion),
+      sinReceta: evaluacion.sinReceta.map((o) => ({
+        orden: o.id,
+        linea: o.linea,
+        diametroMm: o.diametroMm,
+        kilogramos: o.kilogramos,
+      })),
+      lineas: detalleLineas.map(({ linea, actual, propuesto }) => ({ linea, actual, propuesto })),
+      movimientos,
+    },
+    lineas: detalleLineas,
+    detalleOrdenes: programa.ordenes.map((o) => ({
+      ...o,
+      lineaPropuesta: lineaPropuestaDe.get(o.id) ?? o.linea,
+    })),
+  };
+}
+
+function resumenLinea(r) {
+  return {
+    ordenes: r.corridas.length,
+    kg: redondear(r.kgProgramados, 0),
+    kgProducibles: redondear(r.kgProducibles, 0),
+    horas: redondear(r.horasRequeridas, 2),
+    horasProduccion: redondear(r.horasProduccion, 2),
+    horasCambio: redondear(r.horasCambio, 2),
+    cambios: r.cambios,
+    utilizacion: redondear(r.utilizacion * 100, 1),
+  };
+}
+
+
+/** Matriz diametro x linea con el kg/h de cada combinacion. */
+function matrizRendimiento(tabla, programa) {
+  const representantes = new Map();
+  for (const o of programa.ordenes) if (!representantes.has(o.diametroMm)) representantes.set(o.diametroMm, o);
+  const lineas = tabla.lineas;
+
+  const filas = [...representantes.keys()]
+    .sort((a, b) => a - b)
+    .map((diametroMm) => {
+      const orden = representantes.get(diametroMm);
+      const celdas = {};
+      let mejorLinea = null;
+      let mejorKgH = 0;
+      for (const l of lineas) {
+        const kgh = tabla.kgHora(l, orden);
+        celdas[l] = kgh === null ? null : Math.round(kgh * 10) / 10;
+        if (kgh && kgh > mejorKgH) {
+          mejorKgH = kgh;
+          mejorLinea = l;
+        }
+      }
+      return { diametroMm, celdas, mejorLinea, mejorKgH: Math.round(mejorKgH * 10) / 10 };
+    });
+
+  return { lineas, filas };
+}
+
+// ===== interfaz del demo ======================================================
+//
+// Lo mismo que hace web/app.js, pero sin servidor: el analisis corre aqui
+// mismo con el motor inlineado arriba.
+
+const $ = (id) => document.getElementById(id);
+const num = (v, d = 0) =>
+  (v ?? 0).toLocaleString('es-MX', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+const LLAVE = 'hiloflo.demo.v1';
+
+let recetas = null; // { puntos, archivo }
+let paquete = null;
+let vista = 'actual';
+let estado = cargarEstado();
+
+// --- persistencia en el navegador -------------------------------------------
+// Es lo unico que reemplaza a SQL Server aqui. Puede fallar (modo incognito,
+// cuota llena), y si falla el demo sigue funcionando en memoria.
+
+function cargarEstado() {
+  try {
+    return JSON.parse(localStorage.getItem(LLAVE)) ?? { consecutivo: 0, programas: [] };
+  } catch {
+    return { consecutivo: 0, programas: [] };
+  }
+}
+
+function guardarEstado() {
+  try {
+    localStorage.setItem(LLAVE, JSON.stringify(estado));
+  } catch {
+    // Cuota llena: se tiran los folios mas viejos y se reintenta una vez.
+    estado.programas = estado.programas.slice(0, 2);
+    try {
+      localStorage.setItem(LLAVE, JSON.stringify(estado));
+    } catch {
+      /* el demo sigue con lo que trae en memoria */
+    }
+  }
+}
+
+function siguienteFolio() {
+  estado.consecutivo += 1;
+  return `FLO-${new Date().getFullYear()}-${String(estado.consecutivo).padStart(4, '0')}`;
+}
+
+// --- carga de archivos -------------------------------------------------------
+
+const leerArchivo = (archivo) => archivo.arrayBuffer();
+
+$('archivo-recetas').addEventListener('change', async (ev) => {
+  const archivo = ev.target.files[0];
+  if (!archivo) return;
+  ocultarError();
+  $('progreso').textContent = 'Leyendo el WI…';
+  try {
+    const hoja = await leerHoja(await leerArchivo(archivo), HOJA_WI);
+    recetas = { puntos: interpretarVelocidades(hoja), archivo: archivo.name };
+    estado.recetas = { archivo: archivo.name, puntos: recetas.puntos.length };
+    guardarEstado();
+    pintarEstadoRecetas();
+  } catch (e) {
+    mostrarError(`No se pudo leer el WI: ${e.message}`);
+  } finally {
+    $('progreso').textContent = '';
+  }
+});
+
+$('archivo-schedule').addEventListener('change', () => {
+  $('paso-schedule').classList.toggle('listo', $('archivo-schedule').files.length > 0);
+  revisarListo();
+});
+
+$('analizar').addEventListener('click', async () => {
+  const archivo = $('archivo-schedule').files[0];
+  if (!archivo || !recetas) return;
+  ocultarError();
+  $('analizar').disabled = true;
+  $('progreso').textContent = 'Analizando… tarda unos segundos.';
+  // Un respiro para que el navegador pinte el mensaje antes de bloquearse.
+  await new Promise((r) => setTimeout(r, 30));
+
+  try {
+    const hoja = await leerHoja(await leerArchivo(archivo), HOJA_SCHEDULE);
+    const programa = interpretarPrograma(hoja);
+    const supuestos = { ...SUPUESTOS };
+    const resultado = analizar(programa, recetas.puntos, supuestos);
+
+    const nuevo = empaquetar({
+      folio: siguienteFolio(),
+      archivo: archivo.name,
+      cargadoPor: null,
+      supuestos,
+      ...resultado,
+    });
+
+    estado.programas.unshift(nuevo);
+    estado.programas = estado.programas.slice(0, 5);
+    guardarEstado();
+    mostrar(nuevo);
+  } catch (e) {
+    mostrarError(e.message);
+  } finally {
+    $('analizar').disabled = false;
+    $('progreso').textContent = '';
+  }
+});
+
+function pintarEstadoRecetas() {
+  if (!recetas) return;
+  const lineas = new Set(recetas.puntos.map((p) => p.linea)).size;
+  const diametros = new Set(recetas.puntos.map((p) => p.diametroMm)).size;
+  $('estado-recetas').textContent =
+    `${num(recetas.puntos.length)} recetas, ${lineas} líneas, ${diametros} diámetros. Ya no hace falta volver a subirlo.`;
+  $('paso-recetas').classList.add('listo');
+  revisarListo();
+}
+
+function revisarListo() {
+  $('analizar').disabled = !(recetas && $('archivo-schedule').files.length);
+}
+
+function pintarHistorial() {
+  if (!estado.programas.length) return ($('historial').innerHTML = '');
+  $('historial').innerHTML = `
+    <h3 style="font-size:15px;color:var(--azul);margin:0 0 8px">Programas anteriores</h3>
+    <table>
+      <tr><th>Folio</th><th>Archivo</th><th>Órdenes</th><th>Toneladas</th><th>Oportunidad</th></tr>
+      ${estado.programas
+        .map(
+          (p) => `<tr>
+            <td><a href="#" data-folio="${p.folio}">${p.folio}</a></td>
+            <td style="text-align:left;color:var(--texto-tenue)">${p.archivo ?? ''}</td>
+            <td class="num">${num(p.ordenes)}</td>
+            <td class="num">${num(p.kilogramos / 1000, 1)}</td>
+            <td class="num" style="color:var(--verde)">+${num(p.analisis.toneladasIncremento, 1)} t</td>
+          </tr>`,
+        )
+        .join('')}
+    </table>`;
+  for (const a of $('historial').querySelectorAll('a[data-folio]')) {
+    a.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const p = estado.programas.find((x) => x.folio === a.dataset.folio);
+      if (p) mostrar(p);
+    });
+  }
+}
+
+// --- pintado -----------------------------------------------------------------
+
+function mostrar(p) {
+  paquete = p;
+  $('carga').hidden = true;
+  $('tabs').hidden = false;
+  $('folio').hidden = false;
+  $('folio').textContent = p.folio;
+  pintarKpis();
+  pintarTablero();
+  pintarConsejos();
+  pintarTablaLineas();
+  pintarRendimiento();
+  abrirPanel('programacion');
+}
+
+function pintarKpis() {
+  const a = paquete.analisis;
+  const gana = a.toneladasIncremento > 0.05;
+  const bloques = [
+    kpi('Cierra hoy en', num(a.makespanActual, 1), 'h', `lo que tarda ${a.cuelloDeBotella}`, 'malo'),
+    kpi('Con el reajuste', num(a.makespanPropuesto, 1), 'h',
+        `${num(a.makespanActual - a.makespanPropuesto, 1)} h antes`, gana ? 'bueno' : ''),
+    kpi('Se puede producir', `+${num(a.toneladasIncremento, 1)}`, 't',
+        `sobre las ${num(a.toneladasActuales, 1)} t del programa`, gana ? 'bueno' : ''),
+    kpi('Hay que mover', num(a.ordenesMovidas), `de ${num(paquete.ordenes)}`,
+        `${a.movimientos.length} movimientos`, ''),
+  ].join('');
+  $('kpis-programacion').innerHTML = bloques;
+  $('kpis-analisis').innerHTML = bloques;
+  pintarAvisos(a.avisos ?? []);
+}
+
+function kpi(etiqueta, valor, unidad, pie, clase) {
+  return `<div class="kpi ${clase}">
+    <div class="etiqueta">${etiqueta}</div>
+    <div class="valor">${valor}<small>${unidad}</small></div>
+    <div class="pie">${pie}</div>
+  </div>`;
+}
+
+function pintarAvisos(avisos) {
+  $('avisos').innerHTML = avisos
+    .map((av) => (av.tipo === 'devanador_no_indicado' ? pintarAvisoDevanador(av) : pintarAvisoSinReceta(av)))
+    .join('');
+}
+
+function pintarAvisoDevanador(av) {
+  const recorre = av.cierreSiAlterno - av.cierreAsumido;
+  return `<div class="aviso nota">
+    <strong>${av.ordenes} órdenes (${num(av.kilogramos)} kg) no traen anotado el devanador en las notas del schedule.</strong>
+    Se calcularon con <b>${av.asumido}</b>, que es el deber ser.
+    Si en realidad corrieron con ${av.alterno}, el programa no cierra en
+    <b>${num(av.cierreAsumido, 1)} h</b> sino en <b>${num(av.cierreSiAlterno, 1)} h</b>
+    ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h más</b>` : ''}.
+    <div style="margin-top:5px;color:var(--texto-tenue)">
+      ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} órdenes, ${num(l.kilogramos)} kg`).join(' · ')}
+    </div>
+  </div>`;
+}
+
+function pintarAvisoSinReceta(av) {
+  const d = av.detalle;
+  return `<div class="aviso error">
+    <strong>${av.ordenes} órdenes (${num(av.kilogramos)} kg) están en una línea que no tiene receta para ese diámetro.</strong>
+    Quedan fuera de todos los totales:
+    ${d.slice(0, 6).map((o) => `${o.orden} (${num(o.diametroMm, 2)} mm en ${o.linea})`).join(', ')}${d.length > 6 ? `, y ${d.length - 6} más` : ''}.
+  </div>`;
+}
+
+function pintarTablero() {
+  const propuesta = vista === 'propuesto';
+  $('leyenda-tablero').textContent = propuesta
+    ? 'cómo quedaría cada línea después de mover las órdenes'
+    : 'cómo está programada cada línea hoy';
+
+  const tope = Math.max(...paquete.lineas.map((l) => Math.max(l.actual.horas, l.propuesto.horas)), 1);
+
+  $('tablero').innerHTML = paquete.lineas
+    .map((l) => {
+      const d = propuesta ? l.propuesto : l.actual;
+      const esCuello = !propuesta && l.linea === paquete.analisis.cuelloDeBotella;
+      const delta = l.propuesto.horas - l.actual.horas;
+      const corridas = propuesta
+        ? paquete.lineas
+            .flatMap((otra) => otra.corridas.map((c) => ({ ...c, origen: otra.linea })))
+            .filter((c) => c.lineaPropuesta === l.linea)
+        : l.corridas;
+
+      return `<div class="linea ${l.activa ? '' : 'inactiva'}">
+        <div class="rotulo">
+          <div class="clave">${l.linea}</div>
+          <div class="wc">${l.workCenter}${l.activa ? '' : ' · por instalar'}</div>
+        </div>
+        <div class="contenido">
+          <div class="barra ${esCuello ? 'cuello' : ''} ${propuesta ? 'propuesta' : ''}">
+            <i class="corrida" style="width:${(d.horasProduccion / tope) * 100}%"></i>
+            <i class="cambio" style="width:${(d.horasCambio / tope) * 100}%"></i>
+          </div>
+          <div class="horas">
+            <b>${num(d.horas, 1)} h</b> · ${num(d.kg)} kg · ${d.ordenes} órdenes
+            ${d.cambios ? ` · ${d.cambios} cambios de medida` : ''}
+            ${esCuello ? ' · <span style="color:var(--rojo);font-weight:600">cuello de botella</span>' : ''}
+            ${propuesta && Math.abs(delta) > 0.05
+              ? ` · <span class="${delta < 0 ? 'baja' : 'sube'}">${delta < 0 ? '−' : '+'}${num(Math.abs(delta), 1)} h</span>`
+              : ''}
+          </div>
+          <div class="corridas">${corridas.map((c) => rollo(c, l.linea, propuesta)).join('')}</div>
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
+function rollo(c, clave, propuesta) {
+  let clase = '';
+  let marca = '';
+  if (propuesta && c.origen && c.origen !== clave) {
+    clase = 'entra';
+    marca = ` <span class="destino">← ${c.origen}</span>`;
+  } else if (!propuesta && c.movida) {
+    clase = 'sale';
+    marca = ` <span class="destino">→ ${c.lineaPropuesta}</span>`;
+  }
+  if (c.sinReceta) clase = 'sin-receta';
+  const t = c.sinReceta ? 'sin receta' : `${num(c.horas, 1)} h`;
+  return `<span class="rollo ${clase}" title="${c.orden} · ${c.descripcion ?? ''}">
+    <span class="d">${num(c.diametroMm, 2)}</span> · ${num(c.kilogramos)} kg · ${t}${marca}
+  </span>`;
+}
+
+function pintarConsejos() {
+  const a = paquete.analisis;
+  if (!a.movimientos.length) {
+    $('consejos').innerHTML =
+      '<div class="vacio">El programa ya está balanceado con las recetas disponibles. No hay nada que mover.</div>';
+    return;
+  }
+
+  $('consejos').innerHTML =
+    `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">
+      Hoy el programa cierra en <b>${num(a.makespanActual, 1)} h</b>, que es lo que tarda
+      <b>${a.cuelloDeBotella}</b>; las demás líneas acaban antes y esperan.
+      Con estos ${a.movimientos.length} movimientos cierra en <b>${num(a.makespanPropuesto, 1)} h</b>,
+      y en el mismo calendario caben <b>${num(a.factorProduccion, 2)}×</b> las toneladas de hoy:
+      <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b>.
+      <div style="color:var(--texto-tenue);margin-top:6px">
+        Ese incremento supone que haya carga con qué llenar las horas que se liberan.
+        Si no la hay, la ganancia es cerrar el programa antes.
+      </div>
+    </div>` +
+    a.movimientos
+      .map(
+        (m) => `<div class="consejo" data-id="${m.id}" data-aceptado="${m.aceptado ?? ''}">
+          <span class="indice">${m.id}</span>
+          <span class="detalle">
+            <div class="mover">
+              Pasa <b>${m.ordenes} ${m.ordenes === 1 ? 'orden' : 'órdenes'} de ${num(m.diametroMm, 2)} mm</b>
+              de <b>${m.origen}</b><span class="flecha">→</span><b>${m.destino}</b>
+            </div>
+            <div class="meta">
+              ${num(m.kilogramos)} kg ·
+              ${num(m.horasOrigen, 1)} h en ${m.origen} contra ${num(m.horasDestino, 1)} h en ${m.destino}
+            </div>
+            <div class="folios">Órdenes SAP: ${m.folios.join(', ')}</div>
+          </span>
+          <span class="ganancia">${m.horasLiberadas >= 0 ? '−' : '+'}${num(Math.abs(m.horasLiberadas), 1)} h</span>
+          <span class="acciones">
+            <button class="secundario" data-accion="si">Lo hago</button>
+            <button class="secundario" data-accion="no">No aplica</button>
+          </span>
+        </div>`,
+      )
+      .join('');
+
+  for (const b of $('consejos').querySelectorAll('button[data-accion]')) {
+    b.addEventListener('click', () => {
+      const fila = b.closest('.consejo');
+      const aceptado = b.dataset.accion === 'si';
+      fila.dataset.aceptado = String(aceptado);
+      const m = paquete.analisis.movimientos.find((x) => x.id === Number(fila.dataset.id));
+      if (m) m.aceptado = aceptado;
+      guardarEstado();
+    });
+  }
+}
+
+function pintarTablaLineas() {
+  const filas = paquete.lineas.filter((l) => l.activa || l.actual.ordenes);
+  $('tabla-lineas').innerHTML = `
+    <tr>
+      <th>Línea</th><th>Órdenes</th><th>Toneladas</th>
+      <th>Horas hoy</th><th>Horas reajustado</th><th>Cambio</th><th>Utilización</th>
+    </tr>
+    ${filas
+      .map((l) => {
+        const delta = l.propuesto.horas - l.actual.horas;
+        const color = delta < -0.05 ? 'var(--verde)' : delta > 0.05 ? 'var(--rojo)' : 'var(--texto-tenue)';
+        return `<tr>
+          <td><b>${l.linea}</b> <span style="color:var(--texto-tenue)">${l.workCenter}</span></td>
+          <td class="num">${l.actual.ordenes} → ${l.propuesto.ordenes}</td>
+          <td class="num">${num(l.actual.kg / 1000, 1)} → ${num(l.propuesto.kg / 1000, 1)}</td>
+          <td class="num">${num(l.actual.horas, 1)}</td>
+          <td class="num">${num(l.propuesto.horas, 1)}</td>
+          <td class="num" style="color:${color}">${delta < 0 ? '−' : '+'}${num(Math.abs(delta), 1)} h</td>
+          <td class="num">${num(l.propuesto.utilizacion, 0)}%</td>
+        </tr>`;
+      })
+      .join('')}`;
+}
+
+function pintarRendimiento() {
+  const lineas = catalogoLineas(paquete.supuestos);
+  const tabla = new TablaVelocidades(recetas.puntos, lineas);
+  const programa = new Programa(paquete.detalleOrdenes.map((o) => new Orden(o)));
+  const { lineas: claves, filas } = matrizRendimiento(tabla, programa);
+
+  $('tabla-rendimiento').innerHTML = `
+    <tr><th>Ø mm</th>${claves.map((l) => `<th>${l}</th>`).join('')}<th>Más rápida</th></tr>
+    ${filas
+      .map(
+        (f) => `<tr>
+          <td class="num">${num(f.diametroMm, 2)}</td>
+          ${claves
+            .map((l) => {
+              const v = f.celdas[l];
+              if (v === null || v === undefined) return '<td class="vacia">—</td>';
+              const esMejor = f.mejorKgH > 0 && Math.abs(v - f.mejorKgH) < 0.05;
+              return `<td class="num ${esMejor ? 'mejor' : ''}">${num(v)}</td>`;
+            })
+            .join('')}
+          <td style="text-align:left;color:var(--verde);font-weight:600">${empatadas(f, claves)}</td>
+        </tr>`,
+      )
+      .join('')}`;
+}
+
+/** Todas las lineas que empatan como la mas rapida de ese diametro. */
+function empatadas(fila, claves) {
+  if (!fila.mejorKgH) return '—';
+  const iguales = claves.filter(
+    (l) => fila.celdas[l] !== null && Math.abs(fila.celdas[l] - fila.mejorKgH) < 0.05,
+  );
+  return iguales.length <= 3 ? iguales.join(', ') : `${iguales.length} líneas`;
+}
+
+// --- navegacion --------------------------------------------------------------
+
+$('tabs').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-panel]');
+  if (b) abrirPanel(b.dataset.panel);
+});
+
+function abrirPanel(nombre) {
+  for (const b of $('tabs').querySelectorAll('button')) {
+    b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
+  }
+  for (const p of ['programacion', 'analisis', 'rendimiento']) {
+    $(`panel-${p}`).hidden = p !== nombre;
+  }
+}
+
+$('ver-actual').addEventListener('click', () => cambiarVista('actual'));
+$('ver-propuesto').addEventListener('click', () => cambiarVista('propuesto'));
+
+function cambiarVista(cual) {
+  vista = cual;
+  $('ver-actual').setAttribute('aria-pressed', String(cual === 'actual'));
+  $('ver-propuesto').setAttribute('aria-pressed', String(cual === 'propuesto'));
+  pintarTablero();
+}
+
+function mostrarError(mensaje) {
+  $('error').textContent = mensaje;
+  $('error').hidden = false;
+}
+function ocultarError() {
+  $('error').hidden = true;
+}
+
+// --- arranque ----------------------------------------------------------------
+
+if (estado.recetas) {
+  // El navegador recuerda que ya se cargo un WI, pero no las recetas: pesan
+  // demasiado para guardarlas. Se pide de nuevo el archivo.
+  $('estado-recetas').textContent =
+    `La última vez cargaste ${estado.recetas.archivo} (${num(estado.recetas.puntos)} recetas). Vuelve a seleccionarlo.`;
+}
+pintarHistorial();
+
+</script>
+</body>
+</html>

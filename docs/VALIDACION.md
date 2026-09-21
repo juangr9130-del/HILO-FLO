@@ -57,6 +57,10 @@ Ver [`SUPUESTOS.md`](SUPUESTOS.md). Sólo dos mueven el resultado:
 
 ### 1.3 La prueba de cara
 
+**Para esto no hay que esperar a TI.** `web/hiloflo-demo.html` es un solo
+archivo que se abre con doble clic: sin servidor, sin base y sin internet.
+Corre el mismo motor que el módulo instalado.
+
 Sentar al programador frente a la pantalla de Programación con un schedule
 suyo y preguntarle: **¿esto se parece a tu semana?** No a ver si le gustan
 los consejos — a ver si el tablero refleja lo que él sabe que pasa. Si dice
@@ -114,7 +118,12 @@ Esto es lo que falta de verdad:
   probablemente esté bloqueado. Hay que abrir la pantalla desde una máquina
   de piso y ver si se ven bien; si no, servir los `.woff2` desde el módulo.
 - **La pantalla sólo se ha visto en Chromium a 1440 px.** Falta verla en el
-  navegador y en el monitor que de verdad usa el programador.
+  navegador y en el monitor que de verdad usa el programador. El módulo demo
+  sirve justo para eso, sin montar nada.
+- **El módulo demo usa `DecompressionStream` para abrir el .xlsx**, que
+  existe en Chrome y Edge modernos pero no en navegadores viejos. Si la
+  máquina del programador trae algo antiguo, hay que verlo: el archivo avisa
+  con un error claro, no se queda callado.
 
 ### 2.3 Lo que conviene probar aunque no sea urgente
 
@@ -127,12 +136,13 @@ Esto es lo que falta de verdad:
 
 ## Orden sugerido
 
-1. **Pedir los datos de una semana cerrada** (§1.1). Es lo que más tarda en
-   conseguirse y lo que más vale, así que se pide primero y mientras llega
+1. **Sentar al programador frente al módulo demo** (§1.3). Es lo único que
+   se puede hacer hoy mismo, cuesta media hora y puede tirar supuestos que
+   costarían semanas de backtest.
+2. **Pedir los datos de una semana cerrada** (§1.1). Es lo que más tarda en
+   conseguirse y lo que más vale, así que se pide temprano y mientras llega
    se avanza en lo demás.
-2. **Montar el SQL Server** (§2.1) y correr el módulo de verdad contra él.
-3. **Sentar al programador frente a la pantalla** (§1.3). Media hora, y
-   puede tirar supuestos que costarían semanas de backtest.
+3. **Montar el SQL Server** (§2.2) y correr el módulo de verdad contra él.
 4. **Correr el backtest** cuando lleguen los datos.
 5. **Piloto de dos o tres movimientos** (§1.4).
 

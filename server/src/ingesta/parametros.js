@@ -28,11 +28,11 @@
  *     P   ITW-14
  */
 
-import ExcelJS from 'exceljs';
-import { PuntoVelocidad } from '../motor/modelos.js';
-import { valorCelda } from './comun.js';
+import { DIAMETRO_MAX, DIAMETRO_MIN, PuntoVelocidad } from '../motor/modelos.js';
+import { celda, numerosDeFila } from './hoja.js';
+import { redondear } from '../util/numeros.js';
 
-export const HOJA_PREDETERMINADA = 'Anlagen - Setup ';
+export const HOJA_WI = 'Anlagen - Setup ';
 
 /** columna -> { lineas, winder, grado, slm } */
 export const COLUMNAS = new Map([
@@ -55,53 +55,31 @@ export const COLUMNAS = new Map([
 /** El diametro de la columna A trae ruido de punto flotante (6.25000000000001). */
 export const DECIMALES_DIAMETRO = 2;
 
-/** Rango plausible de diametro de alambre estirado en las lineas ITW (mm). */
-export const DIAMETRO_MIN = 4;
-export const DIAMETRO_MAX = 30;
 
-function elegirHoja(wb, hoja) {
-  if (hoja) {
-    const elegida = wb.getWorksheet(hoja);
-    if (!elegida) throw new Error(`el WI no tiene la hoja "${hoja}"`);
-    return elegida;
-  }
-  // El nombre de la hoja trae un espacio al final en el documento original;
-  // se compara sin espacios por si lo corrigen.
-  const objetivo = HOJA_PREDETERMINADA.trim().toLowerCase();
-  return (
-    wb.worksheets.find((ws) => ws.name.trim().toLowerCase() === objetivo) ?? wb.worksheets[0]
-  );
-}
-
-function redondear(valor, decimales) {
-  const f = 10 ** decimales;
-  return Math.round(valor * f) / f;
-}
-
-/** Extrae todos los puntos de la tabla ITW Line Speed. */
-export async function leerVelocidades(rutaOBuffer, hoja = null) {
-  const wb = new ExcelJS.Workbook();
-  if (Buffer.isBuffer(rutaOBuffer)) await wb.xlsx.load(rutaOBuffer);
-  else await wb.xlsx.readFile(rutaOBuffer);
-
-  const ws = elegirHoja(wb, hoja);
+/**
+ * Interpreta una hoja ya leida.
+ *
+ * Es puro: no sabe de archivos ni de exceljs, asi que corre igual en el
+ * servidor y en el navegador. Ver ingesta/hoja.js.
+ */
+export function interpretarVelocidades({ filas }) {
   const puntos = [];
 
-  ws.eachRow({ includeEmpty: false }, (fila) => {
-    const bruto = valorCelda(fila.getCell(1));
-    if (typeof bruto !== 'number') return;
+  for (const numeroFila of numerosDeFila(filas)) {
+    const bruto = celda(filas, numeroFila, 1);
+    if (typeof bruto !== 'number') continue;
     const diametroMm = redondear(bruto, DECIMALES_DIAMETRO);
-    if (diametroMm < DIAMETRO_MIN || diametroMm > DIAMETRO_MAX) return;
+    if (diametroMm < DIAMETRO_MIN || diametroMm > DIAMETRO_MAX) continue;
 
     for (const [columna, { lineas, winder, grado, slm }] of COLUMNAS) {
-      const velocidad = valorCelda(fila.getCell(columna));
+      const velocidad = celda(filas, numeroFila, columna);
       // Celda vacia = esa linea no corre ese diametro.
       if (typeof velocidad !== 'number' || velocidad <= 0) continue;
       for (const linea of lineas) {
         puntos.push(new PuntoVelocidad({ linea, diametroMm, mmS: velocidad, winder, grado, slm }));
       }
     }
-  });
+  }
 
   if (!puntos.length) {
     throw new Error(
@@ -110,3 +88,4 @@ export async function leerVelocidades(rutaOBuffer, hoja = null) {
   }
   return puntos;
 }
+

@@ -40,6 +40,21 @@ No hay que reformatear nada; se leen tal como salen hoy.
 Cómo está armado cada uno y cómo se interpreta:
 [`docs/DOMINIO.md`](docs/DOMINIO.md).
 
+## Probarlo sin instalar nada
+
+`web/hiloflo-demo.html` es un solo archivo que se abre con doble clic. Sin
+servidor, sin base de datos y sin internet: los dos Excel se leen y se
+analizan dentro del navegador, y no salen de la máquina.
+
+Es para que el programador pueda probarlo hoy, antes de que TI monte nada.
+Corre **el mismo motor** que el módulo instalado — no es una maqueta aparte:
+se genera desde las mismas fuentes con `cd server && npm run demo`, y el
+generador se detiene si detecta que algún nombre chocaría al concatenar.
+
+Lo que el demo no hace, y el módulo instalado sí: guardar los folios de
+verdad (aquí viven en el navegador), login por número de empleado y PIN, y
+compartir lo analizado con los demás módulos de la plataforma.
+
 ## Correr el módulo
 
 ```bash

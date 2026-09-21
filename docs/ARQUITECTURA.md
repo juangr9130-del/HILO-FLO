@@ -71,17 +71,43 @@ server/                   el proceso PM2
     rendimiento.js        mm/s + diámetro -> kg/h, matriz de compatibilidad
     programa.js           evaluación del schedule línea por línea
     optimizador.js        búsqueda de áreas de oportunidad
-  src/ingesta/            lectura de los dos Excel de planta
+  src/ingesta/            interpretación de los dos Excel
+    hoja.js               la forma en que los parsers ven una hoja
+    parametros.js         el WI (puro)
+    schedule.js           el schedule de SAP (puro)
+    excel.js              carga con exceljs (sólo servidor)
+    servidor.js           junta el cargador con los intérpretes
+  src/xlsx/lector.js      lector de .xlsx sin dependencias (para el demo)
   src/servicio/           orquestación y el paquete que consume la pantalla
   src/db/                 SQL Server y el repositorio en memoria
   src/rutas/              la API
-  test/                   pruebas del motor y de la ingesta
+  scripts/                generador del módulo demo
+  test/                   pruebas
 
 web/                      la pantalla (HTML/CSS/JS, sin framework)
+  demo/                   plantilla e interfaz del archivo suelto
+  hiloflo-demo.html       generado: no se edita a mano
 ```
 
 `src/motor/` no importa nada de Express, de mssql ni de exceljs. Se puede
 probar sin levantar nada, que es lo que hacen las pruebas.
+
+### Un solo motor, dos entornos
+
+El módulo demo (`web/hiloflo-demo.html`) corre en el navegador sin nada
+instalado, pero **no es una maqueta aparte**: se genera concatenando las
+mismas fuentes del motor con `npm run demo`. Ya costó una vez tener dos
+implementaciones del mismo algoritmo, cuando el motor estaba en Python y en
+JavaScript, y no se va a repetir.
+
+Lo único que cambia entre los dos entornos es quién lee el Excel: exceljs en
+el servidor, `src/xlsx/lector.js` en el navegador. Los dos entregan la misma
+forma (`src/ingesta/hoja.js`) y hay una prueba que verifica que ven lo mismo
+celda por celda.
+
+El generador **se detiene** si dos módulos declaran el mismo nombre: al
+concatenar viven en el mismo ámbito y uno pisaría al otro en silencio. Ya
+pasó con `avisoSinReceta`, que existía en el dominio y en el pintado.
 
 ## API
 

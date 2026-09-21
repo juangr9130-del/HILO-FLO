@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { lineaAWorkCenter, workCenterALinea } from '../src/motor/modelos.js';
-import { leerVelocidades } from '../src/ingesta/parametros.js';
-import { diametroDe, esSlm, gradoDe, leerPrograma, winderDe } from '../src/ingesta/schedule.js';
+import { leerVelocidades } from '../src/ingesta/servidor.js';
+import { diametroDe, esSlm, gradoDe, winderDe } from '../src/ingesta/schedule.js';
+import { leerPrograma } from '../src/ingesta/servidor.js';
 import { crearSchedule, crearWi } from './fixtures.js';
 
 async function carpeta(t) {

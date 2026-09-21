@@ -3,12 +3,12 @@
  * que los tests no dependan de los documentos reales de Florence.
  */
 import ExcelJS from 'exceljs';
-import { COLUMNAS, HOJA_PREDETERMINADA } from '../src/ingesta/parametros.js';
+import { COLUMNAS, HOJA_WI } from '../src/ingesta/parametros.js';
 
 /** WI de juguete: { diametro: { columna: mmS } }. */
 export async function crearWi(ruta, velocidades) {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(HOJA_PREDETERMINADA);
+  const ws = wb.addWorksheet(HOJA_WI);
 
   ws.getCell('A1').value = 'ITW Line Speed\n[mm/s]';
   ws.getCell('A2').value = 'Drawn Wire Rod Ø\n[mm]';

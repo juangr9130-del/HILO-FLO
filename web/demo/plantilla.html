@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HILO-FLO — Programación ITW (demo)</title>
+
+<!--
+  MÓDULO DEMO DE HILO-FLO — Mubea Florence
+
+  Un solo archivo. Se abre con doble clic, sin servidor, sin base de datos y
+  sin internet: los .xlsx se leen y se analizan dentro del navegador.
+
+  NO se edita a mano. Se genera desde las fuentes del módulo con
+      cd server && npm run demo
+  El motor que corre aquí es exactamente el mismo que corre en producción.
+
+  Lo que este demo NO hace, y el módulo instalado sí:
+    - guardar los folios (aquí viven en el navegador y se pierden al limpiarlo)
+    - login por número de empleado y PIN
+    - compartir lo que se analizó con los demás módulos de la plataforma
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/*{ESTILOS}*/
+
+/* Sólo del demo: el banner que aclara que esto no es el módulo instalado. */
+.banner-demo {
+  background: var(--ambar);
+  color: #fff;
+  padding: 7px 20px;
+  font-size: 13px;
+}
+.banner-demo b { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>HILO-FLO</h1>
+  <span class="planta">Florence · Líneas ITW</span>
+  <span class="relleno"></span>
+  <span class="folio" id="folio" hidden></span>
+  <span class="usuario">demo</span>
+</header>
+
+<div class="banner-demo">
+  <b>Versión de prueba.</b>
+  Todo corre dentro de tu navegador — los archivos no salen de esta máquina.
+  Los folios se guardan aquí mismo y se pierden si limpias el navegador.
+</div>
+
+<nav class="tabs" id="tabs" hidden>
+  <button data-panel="programacion" aria-selected="true">Programación</button>
+  <button data-panel="analisis" aria-selected="false">Análisis</button>
+  <button data-panel="rendimiento" aria-selected="false">Rendimiento kg/h</button>
+</nav>
+
+<main>
+  <div class="aviso error" id="error" hidden></div>
+
+  <div class="carga" id="carga">
+    <h2>Cargar programa de producción</h2>
+    <p>El módulo lee los dos archivos tal como salen hoy de planta; no hay que
+       reformatearlos.</p>
+
+    <div class="paso" id="paso-recetas">
+      <span class="indice">1</span>
+      <span class="texto">
+        <strong>Parámetros de proceso</strong>
+        <span id="estado-recetas">WI-FLO-CSW-P-526 — las velocidades de receta. Se carga una vez.</span>
+      </span>
+      <input type="file" id="archivo-recetas" accept=".xlsx,.xlsm">
+    </div>
+
+    <div class="paso" id="paso-schedule">
+      <span class="indice">2</span>
+      <span class="texto">
+        <strong>Production schedule</strong>
+        <span>El Excel de SAP de la semana. Cada carga recibe su propio folio.</span>
+      </span>
+      <input type="file" id="archivo-schedule" accept=".xlsx,.xlsm">
+    </div>
+
+    <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
+      <button class="primario" id="analizar" disabled>Analizar programa</button>
+      <span id="progreso" style="color:var(--texto-tenue)"></span>
+    </div>
+
+    <div id="historial" style="margin-top:24px"></div>
+  </div>
+
+  <section id="panel-programacion" hidden>
+    <div class="kpis" id="kpis-programacion"></div>
+    <div id="avisos"></div>
+
+    <div class="tarjeta">
+      <h2>
+        Corridas por línea
+        <small id="leyenda-tablero"></small>
+        <span style="float:right;font-weight:400">
+          <button class="secundario" id="ver-actual" aria-pressed="true">Programa actual</button>
+          <button class="secundario" id="ver-propuesto" aria-pressed="false">Con el reajuste</button>
+        </span>
+      </h2>
+      <div id="tablero"></div>
+    </div>
+  </section>
+
+  <section id="panel-analisis" hidden>
+    <div class="kpis" id="kpis-analisis"></div>
+
+    <div class="tarjeta">
+      <h2>Qué conviene hacer <small>consejos ordenados por impacto</small></h2>
+      <div id="consejos"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Carga por línea <small>horas requeridas, antes y después del reajuste</small></h2>
+      <div class="cuerpo" style="padding:0">
+        <div class="scroll"><table id="tabla-lineas"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-rendimiento" hidden>
+    <div class="aviso info">
+      El rendimiento sale de la velocidad de receta y la geometría del alambre:
+      <strong>kg/h = mm/s × 3.6 × (π/4 · d²) × 7 850 kg/m³</strong>.
+      Celda vacía = esa línea no tiene receta para ese diámetro, o sea que no lo corre.
+      En verde, las líneas más rápidas de cada diámetro.
+    </div>
+    <div class="tarjeta">
+      <h2>Rendimiento kg/h por diámetro y línea</h2>
+      <div class="cuerpo" style="padding:0">
+        <div class="scroll"><table id="tabla-rendimiento"></table></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/*{MOTOR}*/
+
+/*{INTERFAZ}*/
+</script>
+</body>
+</html>

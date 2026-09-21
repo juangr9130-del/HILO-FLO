@@ -2,20 +2,26 @@
   "name": "hilo-flo",
   "version": "0.1.0",
   "private": true,
-  "description": "Modulo HILO-FLO de la plataforma Mubea — programacion de las lineas ITW de Florence",
+  "description": "Modulo HILO-FLO de la plataforma Mubea \u2014 programacion de las lineas ITW de Florence",
   "type": "module",
   "main": "src/server.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "demo": "node scripts/construir-demo.mjs"
   },
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "cookie-parser": "^1.4.7",
     "mssql": "^11.0.1",
     "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "^0.9.12"
   }
 }

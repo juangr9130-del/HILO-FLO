@@ -7,19 +7,26 @@ import { Linea, PuntoVelocidad, lineaAWorkCenter } from '../motor/modelos.js';
 import { TablaVelocidades } from '../motor/rendimiento.js';
 import { evaluarPrograma } from '../motor/programa.js';
 import { buscarOportunidades } from '../motor/optimizador.js';
-import { leerVelocidades } from '../ingesta/parametros.js';
-import { leerPrograma } from '../ingesta/schedule.js';
-import { config } from '../config.js';
 import { reunirAvisos } from './avisos.js';
+import { redondear } from '../util/numeros.js';
 
 /** Las 14 lineas instaladas mas ITW-15, que esta por instalarse. */
 export const LINEAS_INSTALADAS = Array.from({ length: 14 }, (_, i) => `ITW-${i + 1}`);
 export const LINEA_POR_INSTALAR = 'ITW-15';
 
+/** Supuestos por omision. El servidor los sobreescribe con su configuracion
+ *  y el modulo demo los usa tal cual. Ver docs/SUPUESTOS.md. */
+export const SUPUESTOS = {
+  horasDisponibles: 144,
+  eficiencia: 1,
+  minutosCambio: 45,
+  maxMovimientos: 400,
+};
+
 export function catalogoLineas({
-  horasDisponibles = config.horasDisponibles,
-  eficiencia = config.eficiencia,
-  minutosCambio = config.minutosCambio,
+  horasDisponibles = SUPUESTOS.horasDisponibles,
+  eficiencia = SUPUESTOS.eficiencia,
+  minutosCambio = SUPUESTOS.minutosCambio,
   itw15Activa = false,
 } = {}) {
   const lineas = LINEAS_INSTALADAS.map(
@@ -43,16 +50,18 @@ export function puntosDesdeFilas(filas) {
 }
 
 /**
- * Corre el analisis completo de un schedule.
+ * Corre el analisis completo de un schedule ya leido.
  *
- * @param {Buffer} bufferSchedule  el .xlsx que subio el programador
+ * Recibe el programa, no el archivo: asi el mismo servicio sirve al servidor
+ * (que lee con exceljs) y al modulo demo (que lee en el navegador).
+ *
+ * @param {Programa} programa  las ordenes del schedule
  * @param {PuntoVelocidad[]} puntos  las recetas del WI
  * @param {object} supuestos  horas, eficiencia, minutos de cambio
  */
-export async function analizar(bufferSchedule, puntos, supuestos = {}) {
+export function analizar(programa, puntos, supuestos = {}) {
   const lineas = catalogoLineas(supuestos);
   const tabla = new TablaVelocidades(puntos, lineas);
-  const programa = await leerPrograma(bufferSchedule);
 
   const desconocidas = programa.lineasUsadas().filter(
     (l) => !lineas.some((x) => x.clave === l),
@@ -65,7 +74,7 @@ export async function analizar(bufferSchedule, puntos, supuestos = {}) {
 
   const evaluacion = evaluarPrograma(programa, lineas, tabla);
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
-    maxMovimientos: config.maxMovimientos,
+    maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
   });
 
   return { programa, lineas, tabla, evaluacion, propuesta };
@@ -177,10 +186,6 @@ function resumenLinea(r) {
   };
 }
 
-function redondear(v, d) {
-  const f = 10 ** d;
-  return Math.round(v * f) / f;
-}
 
 /** Matriz diametro x linea con el kg/h de cada combinacion. */
 export function matrizRendimiento(tabla, programa) {
@@ -209,4 +214,3 @@ export function matrizRendimiento(tabla, programa) {
   return { lineas, filas };
 }
 
-export { leerVelocidades };
