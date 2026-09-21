@@ -29,8 +29,12 @@ pantalla le responde tres cosas:
 1. **Le distribuye las corridas por línea**, con el tiempo de cada rollo.
 2. **Le dice en cuánto cierra el programa** y cuál es la línea que lo frena.
 3. **Le da consejos concretos**: qué órdenes conviene mover de una línea a
-   otra, con sus folios de SAP, y cuántas toneladas más se pueden producir
-   si los aplica.
+   otra, con sus folios de SAP, y cuánta capacidad se libera si los aplica.
+
+El reajuste **no produce más tonelada**: el programa hace la misma antes y
+después. Lo que hace es que cierre antes, y esa capacidad se vuelve tonelada
+sólo si hay órdenes que adelantar. La pantalla lo dice así, para que nadie
+lea el número como producción extra de esa semana.
 
 Cada carga recibe un **folio** (`FLO-2026-0007`) que queda guardado con sus
 supuestos, para poder volver a verlo y para comparar después lo que se

@@ -120,7 +120,12 @@ rápida por hora en delgado.
 
 **Es la pregunta más cara del proyecto**, porque decide el número:
 
-| escenario | cierre | incremento |
+**Ojo con qué significa el incremento.** El reajuste **no produce más
+tonelada**: el programa hace las mismas 1 084 t antes y después. Lo que cambia
+es que cierra antes, y esa capacidad liberada valdría esas toneladas **sólo si
+hay órdenes que adelantar**. Si no las hay, la ganancia es terminar antes.
+
+| escenario | cierre | capacidad liberada |
 |---|---|---|
 | **Deber ser (DEM), el delgado se puede repartir** | **132.1 h → 96.5 h** | **+400 t** |
 | Deber ser (DEM), el delgado amarrado a ITW-2 | 132.1 h → 97.1 h | +391 t |

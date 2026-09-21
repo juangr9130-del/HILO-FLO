@@ -24,15 +24,25 @@ function montarAnalisis(api = {}) {
   let vista = 'actual';
   let programaDesactualizado = false;
 
+  /**
+   * Los cuatro numeros de arriba.
+   *
+   * El tercero se llamaba "Extra output" y se leia como si el programa
+   * produjera mas. No es asi: el reajuste no crea tonelada, mueve trabajo.
+   * Este programa hace la misma tonelada antes y despues, solo que termina
+   * antes; lo que se gana es CAPACIDAD, y solo se vuelve tonelada real si hay
+   * ordenes que adelantar. El rotulo y el pie ahora lo dicen.
+   */
   function pintarKpis() {
     const a = paquete.analisis;
     const gana = a.toneladasIncremento > 0.05;
+    const ahorro = a.makespanActual - a.makespanPropuesto;
     const bloques = [
       kpi('Finishes today in', num(a.makespanActual, 1), 'h', `how long ${a.cuelloDeBotella} takes`, 'malo'),
       kpi('Rebalanced', num(a.makespanPropuesto, 1), 'h',
-          `${num(a.makespanActual - a.makespanPropuesto, 1)} h earlier`, gana ? 'bueno' : ''),
-      kpi('Extra output', `+${num(a.toneladasIncremento, 1)}`, 't',
-          `on top of the program's ${num(a.toneladasActuales, 1)} t`, gana ? 'bueno' : ''),
+          `${num(ahorro, 1)} h earlier · same ${num(a.toneladasActuales, 1)} t`, gana ? 'bueno' : ''),
+      kpi('Capacity freed up', `+${num(a.toneladasIncremento, 1)}`, 't',
+          `fits in the ${num(ahorro, 1)} h — needs orders to pull in`, gana ? 'bueno' : ''),
       kpi('Orders to move', num(a.ordenesMovidas), `of ${num(paquete.ordenes)}`,
           `${a.movimientos.length} moves`, ''),
     ].join('');
@@ -158,12 +168,15 @@ function montarAnalisis(api = {}) {
       `<div class="cuerpo" style="border-bottom:1px solid var(--borde)">
         Today the program finishes in <b>${num(a.makespanActual, 1)} h</b>, which is how long
         <b>${a.cuelloDeBotella}</b> takes; the other lines finish earlier and sit idle.
-        With these ${a.movimientos.length} moves it finishes in <b>${num(a.makespanPropuesto, 1)} h</b>,
-        and the same calendar fits <b>${num(a.factorProduccion, 2)}×</b> today's tonnage:
-        <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b>.
+        With these ${a.movimientos.length} moves it finishes in
+        <b>${num(a.makespanPropuesto, 1)} h</b> — <b>${num(a.makespanActual - a.makespanPropuesto, 1)} h earlier</b>.
         <div style="color:var(--texto-tenue);margin-top:6px">
-          That increase assumes there is work to fill the hours it frees up.
-          If there isn't, the gain is finishing the program earlier.
+          The program still makes the same <b>${num(a.toneladasActuales, 1)} t</b>: rebalancing moves
+          work between lines, it does not create tonnage. What it creates is room — in the
+          <b>${num(a.makespanActual, 1)} h</b> the plant is already committing to this program,
+          <b>${num(a.factorProduccion, 2)}×</b> the work would fit, which is
+          <b style="color:var(--verde)">+${num(a.toneladasIncremento, 1)} t</b> if there are orders
+          to pull in from next week. If there aren't, the gain is simply finishing earlier.
         </div>
       </div>` +
       a.movimientos
@@ -283,7 +296,8 @@ function montarAnalisis(api = {}) {
       `Total hours barely move (${num(total.horasAntes, 1)} h → ${num(total.horasDespues, 1)} h). ` +
       `What drops is the <b>finish time: ${num(a.makespanActual, 1)} h → ${num(a.makespanPropuesto, 1)} h</b>, ` +
       'because the program ends when its busiest line ends, not when the hours add up. ' +
-      'That is why total utilization goes down while output goes up.';
+      `The <b>+${num(a.toneladasIncremento, 1)} t</b> on the cards above is not extra output from ` +
+      'this program — it is what would fit in the time that frees up.';
   }
 
   function renglonCarga(l) {
