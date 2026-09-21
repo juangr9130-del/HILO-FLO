@@ -144,6 +144,9 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
     };
   });
 
+  const objetivo = supuestos.objetivo ?? SUPUESTOS.objetivo;
+  const prod = productividad(evaluacion, ev2, propuesta);
+
   const movimientos = propuesta.agrupadas().map((g, i) => ({
     id: i + 1,
     origen: g.origen,
@@ -180,7 +183,14 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
       toneladasIncremento: redondear(propuesta.toneladasPorBalanceo, 1),
       toneladasDentroDelHorizonte: redondear(propuesta.deltaToneladas, 2),
       ordenesMovidas: movimientos.reduce((t, m) => t + m.ordenes, 0),
-      ...productividad(evaluacion, ev2, propuesta),
+      ...prod,
+      // La cifra TITULAR: la que resume el folio en un renglon del historial.
+      // Cada objetivo gana algo distinto, asi que no puede ser siempre la
+      // misma. Con 'rendimiento' el cierre casi no se mueve a proposito, y
+      // toneladasIncremento salia en +4.1 t mientras el analisis decia +59.2.
+      toneladasGanadas:
+        objetivo === 'rendimiento' ? prod.toneladasPorTiempo : redondear(propuesta.toneladasPorBalanceo, 1),
+      objetivo,
       avisos: reunirAvisos(programa, lineas, tabla, evaluacion, propuesta),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,

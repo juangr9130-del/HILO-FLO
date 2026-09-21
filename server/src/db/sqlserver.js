@@ -226,7 +226,9 @@ export class RepositorioSql {
         .input('ht_actual', sql.Decimal(10, 2), a.horasTotalesActual)
         .input('ht_prop', sql.Decimal(10, 2), a.horasTotalesPropuesto)
         .input('factor', sql.Decimal(6, 3), a.factorProduccion)
-        .input('toneladas', sql.Decimal(10, 2), a.toneladasIncremento)
+        // La columna guarda la cifra TITULAR del folio, que es la que se
+        // lista. Cual sea depende del objetivo con que se corrio.
+        .input('toneladas', sql.Decimal(10, 2), a.toneladasGanadas ?? a.toneladasIncremento)
         .input('movidas', sql.Int, a.ordenesMovidas)
         .input('paquete', sql.NVarChar(sql.MAX), JSON.stringify(registro))
         .query(
@@ -338,7 +340,7 @@ export class RepositorioSql {
     const r = await this.pool.request().query(
       `SELECT TOP 50 p.folio, p.archivo_nombre AS archivo, p.cargado_en AS cargadoEn,
               p.cargado_por AS cargadoPor, p.ordenes, p.kilogramos,
-              a.toneladas_incremento AS toneladasIncremento
+              a.toneladas_incremento AS toneladasGanadas
          FROM flo_programa p
          LEFT JOIN flo_analisis a ON a.programa_id = p.programa_id
         WHERE p.estatus <> 'descartado'

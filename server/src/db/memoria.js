@@ -61,7 +61,9 @@ export class RepositorioMemoria {
         cargadoPor,
         ordenes,
         kilogramos,
-        toneladasIncremento: analisis?.toneladasIncremento ?? 0,
+        // La cifra titular depende del objetivo con que se corrio el folio.
+        toneladasGanadas: analisis?.toneladasGanadas ?? analisis?.toneladasIncremento ?? 0,
+        objetivo: analisis?.objetivo ?? null,
       }))
       .sort((a, b) => String(b.cargadoEn).localeCompare(String(a.cargadoEn)));
   }

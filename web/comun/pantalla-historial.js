@@ -57,7 +57,13 @@ function montarHistorial(api) {
   function renglon(p) {
     // Un folio de una version anterior puede no traer el analisis completo.
     // Se lista igual, pero marcado, para que se pueda borrar.
-    const t = p.analisis?.toneladasIncremento ?? p.toneladasIncremento;
+    // La cifra titular depende del objetivo con que se corrio el folio; los
+    // folios viejos solo traen toneladasIncremento.
+    const t =
+      p.analisis?.toneladasGanadas ??
+      p.toneladasGanadas ??
+      p.analisis?.toneladasIncremento ??
+      p.toneladasIncremento;
     const oportunidad =
       t === undefined || t === null
         ? '<span style="color:var(--ambar)">older version</span>'

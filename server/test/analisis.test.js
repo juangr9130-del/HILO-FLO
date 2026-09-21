@@ -110,3 +110,31 @@ test('la hoja de corridas no pierde ni inventa rollos', () => {
   assert.equal(rollos(p.corridas.actual), p.ordenes);
   assert.equal(rollos(p.corridas.propuesto), p.ordenes);
 });
+
+test('la cifra titular del folio corresponde al objetivo con que se corrio', () => {
+  // El historial resume cada folio en un numero. Con 'calendario' ese numero
+  // es la capacidad que libera cerrar antes; con 'rendimiento' el cierre casi
+  // no se mueve a proposito, asi que ese mismo numero sale ridiculo y lo que
+  // vale es la tonelada del tiempo de maquina ganado.
+  for (const objetivo of ['calendario', 'rendimiento']) {
+    const sup = { ...SUPUESTOS, objetivo };
+    const prog = programa(
+      Array.from({ length: 10 }, (_, i) =>
+        orden(`O${i}`, i % 2 === 0 ? 10 : 12, 6000, 'ITW-2', { secuencia: i }),
+      ),
+    );
+    const a = empaquetar({
+      folio: 'FLO-TEST',
+      archivo: 'prueba.xlsx',
+      supuestos: sup,
+      ...analizar(prog, puntos, sup),
+    }).analisis;
+
+    assert.equal(a.objetivo, objetivo);
+    assert.equal(
+      a.toneladasGanadas,
+      objetivo === 'rendimiento' ? a.toneladasPorTiempo : a.toneladasIncremento,
+      `con ${objetivo} la cifra titular no es la que corresponde`,
+    );
+  }
+});

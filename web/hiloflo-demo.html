@@ -3406,6 +3406,9 @@ function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evalu
     };
   });
 
+  const objetivo = supuestos.objetivo ?? SUPUESTOS.objetivo;
+  const prod = productividad(evaluacion, ev2, propuesta);
+
   const movimientos = propuesta.agrupadas().map((g, i) => ({
     id: i + 1,
     origen: g.origen,
@@ -3442,7 +3445,14 @@ function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evalu
       toneladasIncremento: redondear(propuesta.toneladasPorBalanceo, 1),
       toneladasDentroDelHorizonte: redondear(propuesta.deltaToneladas, 2),
       ordenesMovidas: movimientos.reduce((t, m) => t + m.ordenes, 0),
-      ...productividad(evaluacion, ev2, propuesta),
+      ...prod,
+      // La cifra TITULAR: la que resume el folio en un renglon del historial.
+      // Cada objetivo gana algo distinto, asi que no puede ser siempre la
+      // misma. Con 'rendimiento' el cierre casi no se mueve a proposito, y
+      // toneladasIncremento salia en +4.1 t mientras el analisis decia +59.2.
+      toneladasGanadas:
+        objetivo === 'rendimiento' ? prod.toneladasPorTiempo : redondear(propuesta.toneladasPorBalanceo, 1),
+      objetivo,
       avisos: reunirAvisos(programa, lineas, tabla, evaluacion, propuesta),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
@@ -4749,7 +4759,13 @@ function montarHistorial(api) {
   function renglon(p) {
     // Un folio de una version anterior puede no traer el analisis completo.
     // Se lista igual, pero marcado, para que se pueda borrar.
-    const t = p.analisis?.toneladasIncremento ?? p.toneladasIncremento;
+    // La cifra titular depende del objetivo con que se corrio el folio; los
+    // folios viejos solo traen toneladasIncremento.
+    const t =
+      p.analisis?.toneladasGanadas ??
+      p.toneladasGanadas ??
+      p.analisis?.toneladasIncremento ??
+      p.toneladasIncremento;
     const oportunidad =
       t === undefined || t === null
         ? '<span style="color:var(--ambar)">older version</span>'
@@ -4814,7 +4830,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * paquete y del que lo lee, asi que cambiar cualquiera de ellos invalida lo
  * guardado sin que nadie se tenga que acordar.
  */
-const VERSION_PAQUETE = "10342e1f813c";
+const VERSION_PAQUETE = "91afe98bc380";
 
 let paquete = null;
 let estado = cargarEstado();
