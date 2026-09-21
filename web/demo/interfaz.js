@@ -232,7 +232,7 @@ function abrirPanel(nombre) {
   for (const b of $('tabs').querySelectorAll('button')) {
     b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
   }
-  for (const p of ['programacion', 'analisis', 'rendimiento', 'velocidades']) {
+  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'velocidades']) {
     $(`panel-${p}`).hidden = p !== nombre;
   }
   $('carga').hidden = nombre !== 'carga';
@@ -253,6 +253,25 @@ function cambiarVista(cual) {
   $('ver-propuesto').setAttribute('aria-pressed', String(cual === 'propuesto'));
   analisis.cambiarVista(cual);
 }
+
+// ---------- Hoja de corridas ----------
+// Trae su propio selector de vista: el tablero y la hoja son dos lecturas
+// distintas del mismo folio y el programador las cruza.
+
+$('corridas-actual').addEventListener('click', () => cambiarVistaCorridas('actual'));
+$('corridas-propuesto').addEventListener('click', () => cambiarVistaCorridas('propuesto'));
+$('corridas-linea').addEventListener('change', (ev) => analisis.filtrarLinea(ev.target.value));
+
+function cambiarVistaCorridas(cual) {
+  $('corridas-actual').setAttribute('aria-pressed', String(cual === 'actual'));
+  $('corridas-propuesto').setAttribute('aria-pressed', String(cual === 'propuesto'));
+  analisis.cambiarVistaCorridas(cual);
+}
+
+$('hoja-corridas').addEventListener('click', (ev) => {
+  const fila = ev.target.closest('tr.corrida');
+  if (fila) analisis.alternarCorrida(fila.dataset.corrida);
+});
 
 function mostrarError(mensaje) {
   $('error').textContent = mensaje;

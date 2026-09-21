@@ -414,6 +414,82 @@ button.deshacer {
   text-decoration: underline;
 }
 
+/* ---------- Hoja de corridas ---------- */
+
+/* Barra de la pestaña: vista y filtro de línea. */
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.barra .relleno { flex: 1; }
+.barra .rotulo { font-size: 13px; color: var(--texto-tenue); }
+.barra select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--superficie);
+  color: var(--texto);
+  min-width: 230px;
+}
+p.pista { margin: 0 0 14px; font-size: 13px; color: var(--texto-tenue); }
+
+/* Cierre de la línea, a la derecha del encabezado. */
+.tarjeta > h2 .cierre {
+  float: right;
+  font-family: 'Public Sans', sans-serif;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+.tarjeta > h2 .cierre.sobregiro { color: var(--rojo); font-weight: 600; }
+
+table.hoja td.desc, table.hoja th:nth-child(3) { text-align: left; }
+table.hoja td.desc { color: var(--texto-tenue); font-size: 12px; }
+table.hoja th.n, table.hoja td.n { text-align: right; }
+table.hoja td.n { font-family: 'Barlow Condensed', sans-serif; font-size: 15px; }
+
+/* La corrida se abre con un clic: tiene que verse que se puede. */
+tr.corrida { cursor: pointer; }
+tr.corrida:hover td { background: #f3f6f9; }
+tr.corrida.abierta td { background: #eef1f4; box-shadow: inset 3px 0 0 var(--naranja); }
+tr.corrida.fuera td, tr.rollos tr.fuera td { color: var(--rojo); }
+tr.corrida.sin-receta td { color: var(--texto-tenue); font-style: italic; }
+
+/* Etiquetas cortas de la corrida (SLM, devanador, avisos). */
+.marca {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: var(--azul);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.marca.mala { background: #fdf3f2; color: var(--rojo); }
+
+/* Los rollos de la corrida, anidados dentro de su renglón. */
+tr.rollos > td { padding: 0 0 0 26px; background: #f8fafb; }
+table.rollos { font-size: 12px; }
+table.rollos th { background: #f0f3f6; position: static; }
+table.rollos td, table.rollos th { padding: 5px 10px; }
+/* Encabezado y celda tienen que llevar la MISMA clase: la regla global
+   alinea a la derecha y si solo se marca una de las dos, la columna se lee
+   corrida. Ya paso. */
+table.rollos th.izq, table.rollos td.izq { text-align: left; }
+table.rollos th.n, table.rollos td.n { text-align: right; }
+table.rollos td.notas {
+  color: var(--texto-tenue);
+  max-width: 340px;
+  font-size: 11px;
+}
+
 
 /* Sólo del demo: el banner que aclara que esto no es el módulo instalado. */
 .banner-demo {
@@ -444,6 +520,7 @@ button.deshacer {
 <nav class="tabs" id="tabs">
   <button data-panel="carga" aria-selected="true">Load program</button>
   <button data-panel="programacion" aria-selected="false" data-requiere-programa>Schedule</button>
+  <button data-panel="corridas" aria-selected="false" data-requiere-programa>Run sheet</button>
   <button data-panel="analisis" aria-selected="false" data-requiere-programa>Analysis</button>
   <button data-panel="rendimiento" aria-selected="false" data-requiere-programa>Throughput kg/h</button>
   <button data-panel="velocidades" aria-selected="false">Line speeds</button>
@@ -498,6 +575,19 @@ button.deshacer {
       </h2>
       <div id="tablero"></div>
     </div>
+  </section>
+
+  <section id="panel-corridas" hidden>
+    <div class="barra">
+      <span class="rotulo">View</span>
+      <button class="secundario" id="corridas-actual" aria-pressed="true">Current program</button>
+      <button class="secundario" id="corridas-propuesto" aria-pressed="false">Rebalanced</button>
+      <span class="relleno"></span>
+      <label class="rotulo" for="corridas-linea">Line</label>
+      <select id="corridas-linea"></select>
+    </div>
+    <p class="pista">Click a run to see its coils.</p>
+    <div id="hoja-corridas"></div>
   </section>
 
   <section id="panel-analisis" hidden>
@@ -2893,12 +2983,148 @@ function reunirAvisos(programa, lineas, tabla, evaluacion) {
     .sort((a, b) => orden[a.severidad] - orden[b.severidad]);
 }
 
+// ===== src/servicio/corridas.js ======================================
+
+/**
+ * La hoja de corridas: el schedule visto como lo ve el de piso.
+ *
+ * El analisis contesta "que conviene mover". Esto contesta la otra pregunta,
+ * la que se hace todos los dias: que corre cada linea, en que orden, a que
+ * hora empieza, a que hora acaba y con cuantos rollos.
+ *
+ * Una CORRIDA es un bloque de rollos seguidos del mismo numero de parte en
+ * la misma linea, igual que en HILO. El schedule de Florence trae un renglon
+ * por rollo (~2.3 t cada uno), asi que los rollos de la corrida son los
+ * renglones que se juntaron.
+ *
+ * El reloj se arma acumulando lo que ya calculo el motor. El cambio de medida
+ * se cobra ANTES de la corrida que lo provoca, que es como pasa en la linea:
+ * primero se ajusta, luego se corre.
+ */
+
+
+
+/**
+ * La fecha que trae el nombre del archivo (Schedule_8200_09-17-2026.xlsx).
+ *
+ * El schedule no trae columna de fecha, asi que el nombre es lo unico que
+ * dice de que semana es. Si no se puede leer se regresa null y la pantalla
+ * ensena horas corridas en vez de fecha y hora.
+ */
+function inicioDelPrograma(archivo) {
+  const m = /(\d{2})-(\d{2})-(\d{4})/.exec(String(archivo ?? ''));
+  if (!m) return null;
+  const [, mes, dia, anio] = m.map(Number);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+  // Medianoche en UTC a proposito: la pantalla formatea con los getters UTC
+  // y asi el mismo folio se lee igual en Florence que en Mexico.
+  return new Date(Date.UTC(anio, mes - 1, dia)).toISOString();
+}
+
+/** Los rollos seguidos del mismo numero de parte son una corrida. */
+function agrupar(corridas) {
+  const bloques = [];
+  for (const c of corridas) {
+    const parte = c.orden.material || c.orden.descripcion;
+    const ultimo = bloques.at(-1);
+    if (ultimo && ultimo.parte === parte && ultimo.diametroMm === c.orden.diametroMm) {
+      ultimo.rollos.push(c);
+    } else {
+      bloques.push({ parte, diametroMm: c.orden.diametroMm, rollos: [c] });
+    }
+  }
+  return bloques;
+}
+
+/**
+ * Arma la hoja de una evaluacion.
+ *
+ * @param {Evaluacion} evaluacion  lo que ya calculo el motor
+ * @returns {object[]} una entrada por linea, en el orden del catalogo
+ */
+function hojaDeCorridas(evaluacion) {
+  const hoja = [];
+
+  for (const clave of evaluacion.clavesOrdenadas()) {
+    const r = evaluacion.lineas.get(clave);
+    const horizonte = r.linea.horasDisponibles;
+    let reloj = 0;
+    let numero = 0;
+
+    const corridas = agrupar(r.corridas).map((b) => {
+      numero += 1;
+      // El cambio lo trae el primer rollo del bloque: es el unico que pudo
+      // haber cambiado de medida respecto de lo que corria antes.
+      const horasCambio = b.rollos.reduce((t, c) => t + c.horasCambio, 0);
+      const arranque = reloj;
+      reloj += horasCambio;
+
+      const rollos = b.rollos.map((c) => {
+        const desde = reloj;
+        reloj += c.horasProduccion;
+        return {
+          orden: c.orden.id,
+          kg: redondear(c.orden.kilogramos, 0),
+          kgHora: c.kgHora === null ? null : redondear(c.kgHora, 0),
+          inicioH: redondear(desde, 2),
+          finH: redondear(reloj, 2),
+          // Lo que no cabe en el horizonte no sale esta semana, aunque este
+          // programado. Se marca en vez de esconderlo.
+          completo: c.completa,
+          sinReceta: c.sinReceta,
+        };
+      });
+
+      const kg = b.rollos.reduce((t, c) => t + c.orden.kilogramos, 0);
+      const horasProduccion = b.rollos.reduce((t, c) => t + c.horasProduccion, 0);
+      const primera = b.rollos[0].orden;
+
+      return {
+        n: numero,
+        parte: b.parte,
+        descripcion: primera.descripcion,
+        diametroMm: b.diametroMm,
+        grupoGrado: primera.grupoGrado,
+        slm: primera.slm,
+        winder: primera.winder,
+        rollos: rollos.length,
+        kg: redondear(kg, 0),
+        kgHora: b.rollos[0].kgHora === null ? null : redondear(b.rollos[0].kgHora, 0),
+        horasCambio: redondear(horasCambio, 2),
+        horasProduccion: redondear(horasProduccion, 2),
+        inicioH: redondear(arranque, 2),
+        finH: redondear(reloj, 2),
+        // Una corrida sin receta no consume reloj: la linea no la puede correr.
+        sinReceta: b.rollos.every((c) => c.sinReceta),
+        dentroDelHorizonte: reloj <= horizonte + 1e-6,
+        detalle: rollos,
+      };
+    });
+
+    hoja.push({
+      linea: clave,
+      workCenter: lineaAWorkCenter(clave),
+      activa: r.linea.activa,
+      horasDisponibles: horizonte,
+      corridas: corridas.length,
+      rollos: r.corridas.length,
+      kg: redondear(r.kgProgramados, 0),
+      horas: redondear(r.horasRequeridas, 2),
+      cierreH: redondear(reloj, 2),
+      secuencia: corridas,
+    });
+  }
+
+  return hoja;
+}
+
 // ===== src/servicio/analisis.js ======================================
 
 /**
  * El servicio: junta las recetas, el schedule y el algoritmo, y arma el
  * paquete que consume la pantalla de programacion.
  */
+
 
 
 
@@ -3063,6 +3289,14 @@ function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evalu
       movimientos,
     },
     lineas: detalleLineas,
+    // La hoja de corridas: el mismo schedule visto por linea, con reloj y
+    // rollos. No la calcula la pantalla para que el folio se vuelva a pintar
+    // identico meses despues.
+    inicioPrograma: inicioDelPrograma(archivo),
+    corridas: {
+      actual: hojaDeCorridas(evaluacion),
+      propuesto: hojaDeCorridas(ev2),
+    },
     detalleOrdenes: programa.ordenes.map((o) => ({
       ...o,
       lineaPropuesta: lineaPropuestaDe.get(o.id) ?? o.linea,
@@ -3357,6 +3591,175 @@ function montarAnalisis(api = {}) {
       They are left out of every total:
       ${d.slice(0, 6).map((o) => `${o.orden} (${num(o.diametroMm, 2)} mm on ${o.linea})`).join(', ')}${d.length > 6 ? `, and ${d.length - 6} more` : ''}.
     </div>`;
+  }
+
+  // =========================================================================
+  // Hoja de corridas
+  // =========================================================================
+  //
+  // La otra pregunta del programador. El análisis contesta qué conviene
+  // mover; esto contesta qué corre cada línea, en qué orden, a qué hora y
+  // con cuántos rollos — lo que se imprime y se baja a piso.
+  //
+  // Nada se calcula aquí: el reloj viene resuelto en el paquete para que el
+  // mismo folio se vuelva a pintar idéntico meses después.
+
+  let vistaCorridas = 'actual';
+  let lineaCorridas = '';
+  const corridasAbiertas = new Set();
+
+  const DIAS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  /**
+   * Hora del programa -> fecha y hora de reloj.
+   *
+   * El schedule de SAP no trae columna de fecha: lo único que dice de qué
+   * semana es, es el nombre del archivo. Si no se pudo leer, se enseña la
+   * hora corrida ("14.6 h"), que es honesto y sigue sirviendo para ordenar.
+   *
+   * Se formatea con los getters UTC a propósito: el ancla se guardó en UTC y
+   * así el folio se lee igual en Florence que en México.
+   */
+  function reloj(horas) {
+    const ancla = paquete?.inicioPrograma;
+    if (!ancla) return `${num(horas, 1)} h`;
+    const d = new Date(new Date(ancla).getTime() + horas * 3600000);
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${DIAS[d.getUTCDay()]} ${d.getUTCDate()} · ${hh}:${mm}`;
+  }
+
+  function hojaActiva() {
+    const c = paquete?.corridas;
+    if (!c) return null;
+    return vistaCorridas === 'propuesto' ? c.propuesto : c.actual;
+  }
+
+  /** Las órdenes por id, para colgarle al rollo su PO y sus notas. */
+  function ordenesPorId() {
+    if (!paquete.__porId) {
+      paquete.__porId = new Map((paquete.detalleOrdenes ?? []).map((o) => [o.id, o]));
+    }
+    return paquete.__porId;
+  }
+
+  function pintarHojaCorridas() {
+    const caja = $('hoja-corridas');
+    if (!caja) return;
+    const hoja = hojaActiva();
+
+    // Los folios guardados antes de que existiera esta pantalla no la traen.
+    if (!hoja) {
+      caja.innerHTML =
+        `<div class="aviso nota">This ticket was analyzed before the run sheet
+         existed, so it has no schedule stored. Upload the program again to get it.</div>`;
+      return;
+    }
+
+    const conCarga = hoja.filter((l) => l.rollos > 0);
+    llenarSelectorLineas(conCarga);
+
+    const mostradas = lineaCorridas ? conCarga.filter((l) => l.linea === lineaCorridas) : conCarga;
+    caja.innerHTML = mostradas.length
+      ? mostradas.map(tarjetaLinea).join('')
+      : `<div class="aviso nota">Nothing scheduled on that line.</div>`;
+  }
+
+  function llenarSelectorLineas(lineas) {
+    const sel = $('corridas-linea');
+    if (!sel) return;
+    const claves = lineas.map((l) => l.linea);
+    // Una línea puede quedarse sin carga al cambiar de vista: si la que
+    // estaba elegida ya no existe, se regresa a "todas" en vez de dejar la
+    // pantalla en blanco.
+    if (lineaCorridas && !claves.includes(lineaCorridas)) lineaCorridas = '';
+    sel.innerHTML =
+      `<option value="">All lines (${claves.length})</option>` +
+      lineas
+        .map((l) => `<option value="${l.linea}">${l.linea} — ${l.corridas} runs, ${num(l.kg / 1000, 1)} t</option>`)
+        .join('');
+    sel.value = lineaCorridas;
+  }
+
+  function tarjetaLinea(l) {
+    const sobregiro = l.cierreH > l.horasDisponibles + 1e-6;
+    return `<div class="tarjeta">
+      <h2>${l.linea}
+        <small>${l.workCenter} · ${l.corridas} runs · ${num(l.rollos)} coils · ${num(l.kg / 1000, 1)} t</small>
+        <span class="cierre${sobregiro ? ' sobregiro' : ''}">
+          ${reloj(0)} → ${reloj(l.cierreH)} · ${num(l.horas, 1)} h
+          ${sobregiro ? `· ${num(l.cierreH - l.horasDisponibles, 1)} h past the ${num(l.horasDisponibles)} h horizon` : ''}
+        </span>
+      </h2>
+      <div class="cuerpo" style="padding:0"><div class="scroll">
+        <table class="hoja">
+          <thead><tr>
+            <th>#</th><th>Part</th><th>Description</th><th class="n">Ø mm</th>
+            <th class="n">Coils</th><th class="n">Tons</th><th class="n">kg/h</th>
+            <th class="n">Setup</th><th>Start</th><th>End</th><th class="n">Hours</th>
+          </tr></thead>
+          <tbody>${l.secuencia.map((c) => renglonCorrida(l, c)).join('')}</tbody>
+        </table>
+      </div></div>
+    </div>`;
+  }
+
+  function renglonCorrida(l, c) {
+    const clave = `${l.linea}#${c.n}`;
+    const abierta = corridasAbiertas.has(clave);
+    const fuera = !c.dentroDelHorizonte;
+    const clases = ['corrida', abierta ? 'abierta' : '', fuera ? 'fuera' : '', c.sinReceta ? 'sin-receta' : '']
+      .filter(Boolean)
+      .join(' ');
+
+    const marcas = [
+      c.slm ? '<span class="marca">SLM</span>' : '',
+      c.winder ? `<span class="marca">${c.winder}</span>` : '',
+      c.sinReceta ? '<span class="marca mala">no recipe</span>' : '',
+      fuera && !c.sinReceta ? '<span class="marca mala">past horizon</span>' : '',
+    ].join('');
+
+    return `<tr class="${clases}" data-corrida="${clave}">
+        <td class="n">${c.n}</td>
+        <td><b>${c.parte}</b></td>
+        <td class="desc">${c.descripcion}${marcas}</td>
+        <td class="n">${num(c.diametroMm, 2)}</td>
+        <td class="n">${c.rollos}</td>
+        <td class="n">${num(c.kg / 1000, 1)}</td>
+        <td class="n">${c.kgHora === null ? '—' : num(c.kgHora)}</td>
+        <td class="n">${c.horasCambio > 0 ? `${num(c.horasCambio * 60)} min` : '—'}</td>
+        <td>${c.sinReceta ? '—' : reloj(c.inicioH)}</td>
+        <td>${c.sinReceta ? '—' : reloj(c.finH)}</td>
+        <td class="n">${num(c.horasProduccion + c.horasCambio, 1)}</td>
+      </tr>
+      <tr class="rollos" data-de="${clave}"${abierta ? '' : ' hidden'}>
+        <td colspan="11">${tablaRollos(c)}</td>
+      </tr>`;
+  }
+
+  function tablaRollos(c) {
+    const por = ordenesPorId();
+    return `<table class="rollos">
+      <thead><tr>
+        <th class="izq">Order</th><th class="n">kg</th>
+        <th class="izq">Start</th><th class="izq">End</th>
+        <th class="izq">Customer PO</th><th class="izq">Notes</th>
+      </tr></thead>
+      <tbody>${c.detalle
+        .map((r) => {
+          const o = por.get(r.orden);
+          const parcial = !r.completo && !r.sinReceta;
+          return `<tr${parcial ? ' class="fuera"' : ''}>
+            <td class="izq">${r.orden}</td>
+            <td class="n">${num(r.kg)}${parcial ? ' <span class="marca mala">does not fit</span>' : ''}</td>
+            <td class="izq">${r.sinReceta ? '—' : reloj(r.inicioH)}</td>
+            <td class="izq">${r.sinReceta ? '—' : reloj(r.finH)}</td>
+            <td class="izq">${o?.clientePo || '—'}</td>
+            <td class="izq notas">${o?.notas || ''}</td>
+          </tr>`;
+        })
+        .join('')}</tbody>
+    </table>`;
   }
 
   function pintarTablero() {
@@ -3777,6 +4180,10 @@ function montarAnalisis(api = {}) {
       pintarConsejos();
       pintarTablaLineas();
       pintarTablaRitmo();
+      // Un folio nuevo no hereda lo que estaba desplegado del anterior.
+      corridasAbiertas.clear();
+      lineaCorridas = '';
+      pintarHojaCorridas();
       if (api.obtenerMatriz) pintarMatrizRendimiento(await api.obtenerMatriz(paquete));
     },
 
@@ -3784,6 +4191,30 @@ function montarAnalisis(api = {}) {
     cambiarVista(cual) {
       vista = cual;
       pintarTablero();
+    },
+
+    /** La hoja de corridas trae su propio selector: son dos lecturas
+     *  distintas y el programador suele querer verlas cruzadas. */
+    cambiarVistaCorridas(cual) {
+      vistaCorridas = cual;
+      corridasAbiertas.clear();
+      pintarHojaCorridas();
+    },
+
+    filtrarLinea(clave) {
+      lineaCorridas = clave;
+      pintarHojaCorridas();
+    },
+
+    /** Desplegar o cerrar los rollos de una corrida. */
+    alternarCorrida(clave) {
+      const fila = document.querySelector(`tr.rollos[data-de="${CSS.escape(clave)}"]`);
+      if (!fila) return;
+      const abrir = fila.hidden;
+      fila.hidden = !abrir;
+      fila.previousElementSibling?.classList.toggle('abierta', abrir);
+      if (abrir) corridasAbiertas.add(clave);
+      else corridasAbiertas.delete(clave);
     },
 
     /** Cambiaron las velocidades: lo que se está viendo ya no corresponde. */
@@ -4325,7 +4756,7 @@ function abrirPanel(nombre) {
   for (const b of $('tabs').querySelectorAll('button')) {
     b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
   }
-  for (const p of ['programacion', 'analisis', 'rendimiento', 'velocidades']) {
+  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'velocidades']) {
     $(`panel-${p}`).hidden = p !== nombre;
   }
   $('carga').hidden = nombre !== 'carga';
@@ -4346,6 +4777,25 @@ function cambiarVista(cual) {
   $('ver-propuesto').setAttribute('aria-pressed', String(cual === 'propuesto'));
   analisis.cambiarVista(cual);
 }
+
+// ---------- Hoja de corridas ----------
+// Trae su propio selector de vista: el tablero y la hoja son dos lecturas
+// distintas del mismo folio y el programador las cruza.
+
+$('corridas-actual').addEventListener('click', () => cambiarVistaCorridas('actual'));
+$('corridas-propuesto').addEventListener('click', () => cambiarVistaCorridas('propuesto'));
+$('corridas-linea').addEventListener('change', (ev) => analisis.filtrarLinea(ev.target.value));
+
+function cambiarVistaCorridas(cual) {
+  $('corridas-actual').setAttribute('aria-pressed', String(cual === 'actual'));
+  $('corridas-propuesto').setAttribute('aria-pressed', String(cual === 'propuesto'));
+  analisis.cambiarVistaCorridas(cual);
+}
+
+$('hoja-corridas').addEventListener('click', (ev) => {
+  const fila = ev.target.closest('tr.corrida');
+  if (fila) analisis.alternarCorrida(fila.dataset.corrida);
+});
 
 function mostrarError(mensaje) {
   $('error').textContent = mensaje;

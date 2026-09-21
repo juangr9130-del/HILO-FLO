@@ -86,3 +86,14 @@ test('el desglose nunca reporta una perdida como ganancia', () => {
   // no puede terminar peor en total sin que la tarjeta lo diga.
   assert.equal(Math.sign(a.toneladasPorTiempo), Math.sign(a.horasAhorradas));
 });
+
+test('la hoja de corridas no pierde ni inventa rollos', () => {
+  const p = paqueteDePrueba();
+  const rollos = (hoja) => hoja.reduce((t, l) => t + l.rollos, 0);
+
+  // El schedule de Florence trae un renglon por rollo, asi que la hoja tiene
+  // que cuadrar contra el programa en las dos vistas. Si el rebalanceo
+  // perdiera uno, el de piso correria de menos sin que nada lo avisara.
+  assert.equal(rollos(p.corridas.actual), p.ordenes);
+  assert.equal(rollos(p.corridas.propuesto), p.ordenes);
+});

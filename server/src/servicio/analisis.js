@@ -8,6 +8,7 @@ import { TablaVelocidades } from '../motor/rendimiento.js';
 import { evaluarPrograma } from '../motor/programa.js';
 import { buscarOportunidades } from '../motor/optimizador.js';
 import { reunirAvisos } from './avisos.js';
+import { hojaDeCorridas, inicioDelPrograma } from './corridas.js';
 import { ErrorDeDatos } from '../errores.js';
 import { redondear } from '../util/numeros.js';
 
@@ -167,6 +168,14 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
       movimientos,
     },
     lineas: detalleLineas,
+    // La hoja de corridas: el mismo schedule visto por linea, con reloj y
+    // rollos. No la calcula la pantalla para que el folio se vuelva a pintar
+    // identico meses despues.
+    inicioPrograma: inicioDelPrograma(archivo),
+    corridas: {
+      actual: hojaDeCorridas(evaluacion),
+      propuesto: hojaDeCorridas(ev2),
+    },
     detalleOrdenes: programa.ordenes.map((o) => ({
       ...o,
       lineaPropuesta: lineaPropuestaDe.get(o.id) ?? o.linea,

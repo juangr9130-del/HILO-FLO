@@ -34,6 +34,7 @@ const FUENTES = [
   'src/ingesta/schedule.js',
   'src/xlsx/lector.js',
   'src/servicio/avisos.js',
+  'src/servicio/corridas.js',
   'src/servicio/analisis.js',
 ];
 
@@ -54,8 +55,7 @@ function aplanar(codigo) {
  * Al concatenar, dos declaraciones con el mismo nombre se pisan en silencio.
  * Mejor que la compilacion truene aqui que perseguir el bug en el navegador.
  */
-function revisarDuplicados(porArchivo) {
-  const vistos = new Map();
+function revisarDuplicados(porArchivo, vistos = new Map()) {
   const choques = [];
   for (const [archivo, codigo] of porArchivo) {
     for (const m of codigo.matchAll(/^(?:async\s+)?(?:function|class|const|let)\s+([A-Za-z_$][\w$]*)/gm)) {
@@ -73,9 +73,49 @@ function revisarDuplicados(porArchivo) {
   return vistos.size;
 }
 
+/**
+ * Lo que un modulo importa de otro modulo del motor.
+ *
+ * Sirve para cachar el olvido contrario al duplicado: agregar un archivo
+ * nuevo, importarlo desde otro que si esta en FUENTES y no agregarlo aqui.
+ * Al aplanar, el import desaparece sin dejar rastro y el demo truena hasta
+ * que alguien lo abre en el navegador. Paso con corridas.js.
+ */
+function importados(codigo) {
+  const nombres = [];
+  for (const m of codigo.matchAll(/^import\s+([\s\S]*?)\s+from\s+'(\.[^']+)';/gm)) {
+    const clausula = m[1].trim();
+    const llaves = /\{([\s\S]*)\}/.exec(clausula);
+    if (!llaves) {
+      throw new Error(
+        `${clausula} importa de ${m[2]} sin llaves; el demo solo sabe aplanar imports con nombre.`,
+      );
+    }
+    for (const parte of llaves[1].split(',')) {
+      const local = parte.trim().split(/\s+as\s+/).pop().trim();
+      if (local) nombres.push(local);
+    }
+  }
+  return nombres;
+}
+
+/** Todo lo que se importa tiene que quedar declarado en el paquete. */
+function revisarFaltantes(pedidos, declarados) {
+  const faltan = [...new Set([...pedidos].filter((n) => !declarados.has(n)))];
+  if (faltan.length) {
+    throw new Error(
+      'estos simbolos se importan pero no quedaron en el demo:\n  - ' + faltan.join('\n  - ') +
+      '\nProbablemente falta agregar su archivo a FUENTES en este script.',
+    );
+  }
+}
+
 const porArchivo = [];
+const pedidos = [];
 for (const ruta of FUENTES) {
-  porArchivo.push([ruta, aplanar(await readFile(join(RAIZ, ruta), 'utf8'))]);
+  const crudo = await readFile(join(RAIZ, ruta), 'utf8');
+  pedidos.push(...importados(crudo));
+  porArchivo.push([ruta, aplanar(crudo)]);
 }
 
 const estilos = await readFile(join(WEB, 'estilos.css'), 'utf8');
@@ -88,7 +128,9 @@ const interfaz = [...comun, await readFile(join(WEB, 'demo', 'interfaz.js'), 'ut
 // La interfaz entra al MISMO ambito que el motor, asi que tambien se revisa.
 // Aqui choco una vez avisoSinReceta (dominio) contra avisoSinReceta (pintado)
 // y la version de pintado gano en silencio.
-const simbolos = revisarDuplicados([...porArchivo, ['web/demo/interfaz.js', interfaz]]);
+const declarados = new Map();
+const simbolos = revisarDuplicados([...porArchivo, ['web/demo/interfaz.js', interfaz]], declarados);
+revisarFaltantes(pedidos, declarados);
 
 const motor = porArchivo
   .map(([ruta, codigo]) => `// ===== ${ruta} ${'='.repeat(Math.max(0, 62 - ruta.length))}\n\n${codigo}`)

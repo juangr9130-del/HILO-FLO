@@ -119,6 +119,9 @@ server/                   el proceso PM2
     servidor.js           junta el cargador con los intérpretes
   src/xlsx/lector.js      lector de .xlsx sin dependencias (para el demo)
   src/servicio/           orquestación y el paquete que consume la pantalla
+    analisis.js           arma el paquete: evaluación, propuesta, productividad
+    corridas.js           la hoja de corridas (reloj por línea, rollos)
+    avisos.js             devanador no indicado, diámetro sin receta
   src/db/                 SQL Server y el repositorio en memoria
   src/rutas/              la API
   src/catalogo/           las velocidades del WI, dentro del módulo

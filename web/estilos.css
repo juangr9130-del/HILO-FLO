@@ -387,3 +387,79 @@ button.deshacer {
   padding: 0;
   text-decoration: underline;
 }
+
+/* ---------- Hoja de corridas ---------- */
+
+/* Barra de la pestaña: vista y filtro de línea. */
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.barra .relleno { flex: 1; }
+.barra .rotulo { font-size: 13px; color: var(--texto-tenue); }
+.barra select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--superficie);
+  color: var(--texto);
+  min-width: 230px;
+}
+p.pista { margin: 0 0 14px; font-size: 13px; color: var(--texto-tenue); }
+
+/* Cierre de la línea, a la derecha del encabezado. */
+.tarjeta > h2 .cierre {
+  float: right;
+  font-family: 'Public Sans', sans-serif;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+.tarjeta > h2 .cierre.sobregiro { color: var(--rojo); font-weight: 600; }
+
+table.hoja td.desc, table.hoja th:nth-child(3) { text-align: left; }
+table.hoja td.desc { color: var(--texto-tenue); font-size: 12px; }
+table.hoja th.n, table.hoja td.n { text-align: right; }
+table.hoja td.n { font-family: 'Barlow Condensed', sans-serif; font-size: 15px; }
+
+/* La corrida se abre con un clic: tiene que verse que se puede. */
+tr.corrida { cursor: pointer; }
+tr.corrida:hover td { background: #f3f6f9; }
+tr.corrida.abierta td { background: #eef1f4; box-shadow: inset 3px 0 0 var(--naranja); }
+tr.corrida.fuera td, tr.rollos tr.fuera td { color: var(--rojo); }
+tr.corrida.sin-receta td { color: var(--texto-tenue); font-style: italic; }
+
+/* Etiquetas cortas de la corrida (SLM, devanador, avisos). */
+.marca {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: var(--azul);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.marca.mala { background: #fdf3f2; color: var(--rojo); }
+
+/* Los rollos de la corrida, anidados dentro de su renglón. */
+tr.rollos > td { padding: 0 0 0 26px; background: #f8fafb; }
+table.rollos { font-size: 12px; }
+table.rollos th { background: #f0f3f6; position: static; }
+table.rollos td, table.rollos th { padding: 5px 10px; }
+/* Encabezado y celda tienen que llevar la MISMA clase: la regla global
+   alinea a la derecha y si solo se marca una de las dos, la columna se lee
+   corrida. Ya paso. */
+table.rollos th.izq, table.rollos td.izq { text-align: left; }
+table.rollos th.n, table.rollos td.n { text-align: right; }
+table.rollos td.notas {
+  color: var(--texto-tenue);
+  max-width: 340px;
+  font-size: 11px;
+}

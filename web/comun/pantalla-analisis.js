@@ -157,6 +157,175 @@ function montarAnalisis(api = {}) {
     </div>`;
   }
 
+  // =========================================================================
+  // Hoja de corridas
+  // =========================================================================
+  //
+  // La otra pregunta del programador. El análisis contesta qué conviene
+  // mover; esto contesta qué corre cada línea, en qué orden, a qué hora y
+  // con cuántos rollos — lo que se imprime y se baja a piso.
+  //
+  // Nada se calcula aquí: el reloj viene resuelto en el paquete para que el
+  // mismo folio se vuelva a pintar idéntico meses después.
+
+  let vistaCorridas = 'actual';
+  let lineaCorridas = '';
+  const corridasAbiertas = new Set();
+
+  const DIAS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  /**
+   * Hora del programa -> fecha y hora de reloj.
+   *
+   * El schedule de SAP no trae columna de fecha: lo único que dice de qué
+   * semana es, es el nombre del archivo. Si no se pudo leer, se enseña la
+   * hora corrida ("14.6 h"), que es honesto y sigue sirviendo para ordenar.
+   *
+   * Se formatea con los getters UTC a propósito: el ancla se guardó en UTC y
+   * así el folio se lee igual en Florence que en México.
+   */
+  function reloj(horas) {
+    const ancla = paquete?.inicioPrograma;
+    if (!ancla) return `${num(horas, 1)} h`;
+    const d = new Date(new Date(ancla).getTime() + horas * 3600000);
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${DIAS[d.getUTCDay()]} ${d.getUTCDate()} · ${hh}:${mm}`;
+  }
+
+  function hojaActiva() {
+    const c = paquete?.corridas;
+    if (!c) return null;
+    return vistaCorridas === 'propuesto' ? c.propuesto : c.actual;
+  }
+
+  /** Las órdenes por id, para colgarle al rollo su PO y sus notas. */
+  function ordenesPorId() {
+    if (!paquete.__porId) {
+      paquete.__porId = new Map((paquete.detalleOrdenes ?? []).map((o) => [o.id, o]));
+    }
+    return paquete.__porId;
+  }
+
+  function pintarHojaCorridas() {
+    const caja = $('hoja-corridas');
+    if (!caja) return;
+    const hoja = hojaActiva();
+
+    // Los folios guardados antes de que existiera esta pantalla no la traen.
+    if (!hoja) {
+      caja.innerHTML =
+        `<div class="aviso nota">This ticket was analyzed before the run sheet
+         existed, so it has no schedule stored. Upload the program again to get it.</div>`;
+      return;
+    }
+
+    const conCarga = hoja.filter((l) => l.rollos > 0);
+    llenarSelectorLineas(conCarga);
+
+    const mostradas = lineaCorridas ? conCarga.filter((l) => l.linea === lineaCorridas) : conCarga;
+    caja.innerHTML = mostradas.length
+      ? mostradas.map(tarjetaLinea).join('')
+      : `<div class="aviso nota">Nothing scheduled on that line.</div>`;
+  }
+
+  function llenarSelectorLineas(lineas) {
+    const sel = $('corridas-linea');
+    if (!sel) return;
+    const claves = lineas.map((l) => l.linea);
+    // Una línea puede quedarse sin carga al cambiar de vista: si la que
+    // estaba elegida ya no existe, se regresa a "todas" en vez de dejar la
+    // pantalla en blanco.
+    if (lineaCorridas && !claves.includes(lineaCorridas)) lineaCorridas = '';
+    sel.innerHTML =
+      `<option value="">All lines (${claves.length})</option>` +
+      lineas
+        .map((l) => `<option value="${l.linea}">${l.linea} — ${l.corridas} runs, ${num(l.kg / 1000, 1)} t</option>`)
+        .join('');
+    sel.value = lineaCorridas;
+  }
+
+  function tarjetaLinea(l) {
+    const sobregiro = l.cierreH > l.horasDisponibles + 1e-6;
+    return `<div class="tarjeta">
+      <h2>${l.linea}
+        <small>${l.workCenter} · ${l.corridas} runs · ${num(l.rollos)} coils · ${num(l.kg / 1000, 1)} t</small>
+        <span class="cierre${sobregiro ? ' sobregiro' : ''}">
+          ${reloj(0)} → ${reloj(l.cierreH)} · ${num(l.horas, 1)} h
+          ${sobregiro ? `· ${num(l.cierreH - l.horasDisponibles, 1)} h past the ${num(l.horasDisponibles)} h horizon` : ''}
+        </span>
+      </h2>
+      <div class="cuerpo" style="padding:0"><div class="scroll">
+        <table class="hoja">
+          <thead><tr>
+            <th>#</th><th>Part</th><th>Description</th><th class="n">Ø mm</th>
+            <th class="n">Coils</th><th class="n">Tons</th><th class="n">kg/h</th>
+            <th class="n">Setup</th><th>Start</th><th>End</th><th class="n">Hours</th>
+          </tr></thead>
+          <tbody>${l.secuencia.map((c) => renglonCorrida(l, c)).join('')}</tbody>
+        </table>
+      </div></div>
+    </div>`;
+  }
+
+  function renglonCorrida(l, c) {
+    const clave = `${l.linea}#${c.n}`;
+    const abierta = corridasAbiertas.has(clave);
+    const fuera = !c.dentroDelHorizonte;
+    const clases = ['corrida', abierta ? 'abierta' : '', fuera ? 'fuera' : '', c.sinReceta ? 'sin-receta' : '']
+      .filter(Boolean)
+      .join(' ');
+
+    const marcas = [
+      c.slm ? '<span class="marca">SLM</span>' : '',
+      c.winder ? `<span class="marca">${c.winder}</span>` : '',
+      c.sinReceta ? '<span class="marca mala">no recipe</span>' : '',
+      fuera && !c.sinReceta ? '<span class="marca mala">past horizon</span>' : '',
+    ].join('');
+
+    return `<tr class="${clases}" data-corrida="${clave}">
+        <td class="n">${c.n}</td>
+        <td><b>${c.parte}</b></td>
+        <td class="desc">${c.descripcion}${marcas}</td>
+        <td class="n">${num(c.diametroMm, 2)}</td>
+        <td class="n">${c.rollos}</td>
+        <td class="n">${num(c.kg / 1000, 1)}</td>
+        <td class="n">${c.kgHora === null ? '—' : num(c.kgHora)}</td>
+        <td class="n">${c.horasCambio > 0 ? `${num(c.horasCambio * 60)} min` : '—'}</td>
+        <td>${c.sinReceta ? '—' : reloj(c.inicioH)}</td>
+        <td>${c.sinReceta ? '—' : reloj(c.finH)}</td>
+        <td class="n">${num(c.horasProduccion + c.horasCambio, 1)}</td>
+      </tr>
+      <tr class="rollos" data-de="${clave}"${abierta ? '' : ' hidden'}>
+        <td colspan="11">${tablaRollos(c)}</td>
+      </tr>`;
+  }
+
+  function tablaRollos(c) {
+    const por = ordenesPorId();
+    return `<table class="rollos">
+      <thead><tr>
+        <th class="izq">Order</th><th class="n">kg</th>
+        <th class="izq">Start</th><th class="izq">End</th>
+        <th class="izq">Customer PO</th><th class="izq">Notes</th>
+      </tr></thead>
+      <tbody>${c.detalle
+        .map((r) => {
+          const o = por.get(r.orden);
+          const parcial = !r.completo && !r.sinReceta;
+          return `<tr${parcial ? ' class="fuera"' : ''}>
+            <td class="izq">${r.orden}</td>
+            <td class="n">${num(r.kg)}${parcial ? ' <span class="marca mala">does not fit</span>' : ''}</td>
+            <td class="izq">${r.sinReceta ? '—' : reloj(r.inicioH)}</td>
+            <td class="izq">${r.sinReceta ? '—' : reloj(r.finH)}</td>
+            <td class="izq">${o?.clientePo || '—'}</td>
+            <td class="izq notas">${o?.notas || ''}</td>
+          </tr>`;
+        })
+        .join('')}</tbody>
+    </table>`;
+  }
+
   function pintarTablero() {
     const propuesta = vista === 'propuesto';
     $('leyenda-tablero').textContent = propuesta
@@ -575,6 +744,10 @@ function montarAnalisis(api = {}) {
       pintarConsejos();
       pintarTablaLineas();
       pintarTablaRitmo();
+      // Un folio nuevo no hereda lo que estaba desplegado del anterior.
+      corridasAbiertas.clear();
+      lineaCorridas = '';
+      pintarHojaCorridas();
       if (api.obtenerMatriz) pintarMatrizRendimiento(await api.obtenerMatriz(paquete));
     },
 
@@ -582,6 +755,30 @@ function montarAnalisis(api = {}) {
     cambiarVista(cual) {
       vista = cual;
       pintarTablero();
+    },
+
+    /** La hoja de corridas trae su propio selector: son dos lecturas
+     *  distintas y el programador suele querer verlas cruzadas. */
+    cambiarVistaCorridas(cual) {
+      vistaCorridas = cual;
+      corridasAbiertas.clear();
+      pintarHojaCorridas();
+    },
+
+    filtrarLinea(clave) {
+      lineaCorridas = clave;
+      pintarHojaCorridas();
+    },
+
+    /** Desplegar o cerrar los rollos de una corrida. */
+    alternarCorrida(clave) {
+      const fila = document.querySelector(`tr.rollos[data-de="${CSS.escape(clave)}"]`);
+      if (!fila) return;
+      const abrir = fila.hidden;
+      fila.hidden = !abrir;
+      fila.previousElementSibling?.classList.toggle('abierta', abrir);
+      if (abrir) corridasAbiertas.add(clave);
+      else corridasAbiertas.delete(clave);
     },
 
     /** Cambiaron las velocidades: lo que se está viendo ya no corresponde. */

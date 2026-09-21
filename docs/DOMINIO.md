@@ -119,6 +119,34 @@ Por cada línea, en la secuencia en que están programadas sus órdenes:
 - se van consumiendo las horas disponibles del horizonte; lo que ya no cabe
   se reporta como kilogramos no producibles
 
+## La hoja de corridas
+
+El análisis contesta *qué conviene mover*. La hoja de corridas contesta la
+otra pregunta, la de todos los días: **qué corre cada línea, en qué orden, a
+qué hora y con cuántos rollos**. Es lo que se baja a piso.
+
+Una **corrida** es un bloque de rollos seguidos del mismo número de parte en
+la misma línea, igual que en HILO. El schedule de Florence trae **un renglón
+por rollo** (~2.3 t cada uno; las notas confirman «Full coils must be under
+2600 kgs»), así que los rollos de la corrida son los renglones que se
+juntaron. Volver al mismo número de parte más adelante **abre una corrida
+nueva**: si el programador intercaló otra parte, la línea corre dos bloques
+y eso es lo que tiene que ver.
+
+El reloj se arma acumulando lo que ya calculó el motor, sin recalcular nada.
+El cambio de medida se cobra **antes** de la corrida que lo provoca, que es
+como pasa en la línea: primero se ajusta, luego se corre.
+
+**La fecha sale del nombre del archivo** (`Schedule_8200_09-17-2026.xlsx`),
+porque el schedule no trae columna de fecha: es lo único que dice de qué
+semana es. Si no se puede leer, la pantalla enseña horas corridas («14.6 h»)
+en vez de fecha y hora, que es honesto y sigue sirviendo para ordenar.
+
+Lo que no cabe en el horizonte se **marca**, no se esconde: la corrida sale
+en rojo con «past horizon» y el rollo que se parte a la mitad dice «does not
+fit». Una corrida sin receta no consume reloj (la línea no la puede correr)
+pero también aparece.
+
 ## Cómo se buscan las áreas de oportunidad
 
 Búsqueda local sobre el schedule que ya armó el programador. En cada vuelta

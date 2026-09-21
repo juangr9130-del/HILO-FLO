@@ -22,6 +22,7 @@
 <nav class="tabs" id="tabs">
   <button data-panel="carga" aria-selected="true">Load program</button>
   <button data-panel="programacion" aria-selected="false" data-requiere-programa>Schedule</button>
+  <button data-panel="corridas" aria-selected="false" data-requiere-programa>Run sheet</button>
   <button data-panel="analisis" aria-selected="false" data-requiere-programa>Analysis</button>
   <button data-panel="rendimiento" aria-selected="false" data-requiere-programa>Throughput kg/h</button>
   <button data-panel="velocidades" aria-selected="false">Line speeds</button>
@@ -78,6 +79,20 @@
       </h2>
       <div id="tablero"></div>
     </div>
+  </section>
+
+  <!-- ---------- Run sheet ---------- -->
+  <section id="panel-corridas" hidden>
+    <div class="barra">
+      <span class="rotulo">View</span>
+      <button class="secundario" id="corridas-actual" aria-pressed="true">Current program</button>
+      <button class="secundario" id="corridas-propuesto" aria-pressed="false">Rebalanced</button>
+      <span class="relleno"></span>
+      <label class="rotulo" for="corridas-linea">Line</label>
+      <select id="corridas-linea"></select>
+    </div>
+    <p class="pista">Click a run to see its coils.</p>
+    <div id="hoja-corridas"></div>
   </section>
 
   <!-- ---------- Analysis ---------- -->
