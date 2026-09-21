@@ -71,19 +71,115 @@ vale la pena tenerlo claro antes de prometer nada.
 
 | | antes | después |
 |---|---|---|
-| ritmo de planta | 840 kg/h | 858 kg/h (**+2.1 %**) |
-| cierre del programa | 132.1 h | 96.5 h (**−27 %**) |
+| ritmo de planta | 840 kg/h | 856 kg/h (**+2.0 %**) |
+| cierre del programa | 129.6 h | 95.2 h (**−27 %**) |
 
 **Sólo repartir las horas de hoy en partes iguales, sin mover una sola orden
-a una línea más rápida, ya cerraría en 96.3 h.** Es decir: prácticamente toda
+a una línea más rápida, ya cerraría en 94.9 h.** Es decir: prácticamente toda
 la ganancia viene de que ninguna línea se quede parada esperando, no de que
 las líneas corran más rápido.
 
 Eso tiene una consecuencia que sorprende en la pantalla de *Output per line*:
-**algunas líneas quedan más lentas a propósito**. ITW-8 baja 12.1 % porque
+**algunas líneas quedan más lentas a propósito**. ITW-8 baja 11.8 % porque
 absorbe alambre de 9.53 mm para descargar a ITW-2, que era la que frenaba
 todo el programa. Una línea con menos kg/h está bien si con eso la planta
 cierra antes; optimizar el kg/h línea por línea sería optimizar lo que no es.
+
+## 2d. Las asunciones del rebalanceo, explícitas
+
+Esta sección existe porque Florence pidió que quedaran claras antes de
+avanzar. Cada punto dice **qué asume el módulo, qué tan firme es y qué pasa
+si está mal**.
+
+### A. Un rollo puede ir a cualquier línea que tenga velocidad para ese diámetro — FIRME
+
+**Confirmado con Florence:** lo que amarra un rollo a una línea son los
+rangos de diámetro que históricamente ha corrido, y eso es exactamente lo
+que la tabla de velocidades registra. Celda vacía = ahí no se corre.
+
+Es la asunción más fuerte del modelo y es la correcta. El módulo **no** sabe
+de herramental, colada o cliente (ver sección 7); si alguna de ésas amarra de
+verdad, hay que capturarla.
+
+### B. La carga de ITW-2 no es una decisión, es un punto ciego — FIRME
+
+Había supuesto que ITW-2 llega al 90 % porque el programador lo quiere así.
+**Es falso, y Florence lo corrigió:** el programador arma el programa por
+requerimiento —los resortes que necesita— y **no ve cuántas horas lleva
+programadas por línea**. Cuando le faltan rollos, agrega más en la siguiente
+revisión.
+
+ITW-2 acumula horas porque *ahí los rollos duran más*: es la línea más lenta
+de la planta (517 kg/h de promedio contra 1 111 de ITW-13), así que los
+mismos rollos comen más horas sin que nadie lo decidiera.
+
+**Esto es lo que justifica el rebalanceo.** Si la carga de ITW-2 fuera
+intencional, mover ese material sería pasar por encima del programador. No lo
+es: es el efecto de un dato que hoy no tiene a la vista, y que el módulo le da.
+
+### C. Nada se queda fuera del horizonte — VERIFICADO, y cambia la lectura
+
+Sobre el schedule del 17/09: **programado 1 084.4 t, producible 1 084.4 t.**
+Ni un kilo se queda fuera. ITW-2 al 90 % **cabe** en las 144 h.
+
+Consecuencia que hay que tener presente: **el rebalanceo no rescata tonelada**,
+sólo comprime el calendario. La ganancia es terminar antes, no producir más.
+Si todo cabe en la semana de todos modos, hay que preguntarse cuánto vale
+terminar antes (ver la decisión pendiente abajo).
+
+### D. Las 144 h son parejas para las 14 líneas — SIN VERIFICAR
+
+Es un supuesto plano: 6 días × 24 h para todas. Florence confirma que **el
+programador tampoco lo sabe**, así que no hay de dónde contrastarlo hoy.
+
+Si alguna línea corre menos turnos, su utilización real es más alta que la
+que muestra el módulo y su capacidad libre es menor. ITW-14 aparece al 47 %:
+puede ser que esté floja, o puede ser que corra menos turnos. **No lo
+sabemos, y es lo que más conviene averiguar.**
+
+### E. El objetivo es el CALENDARIO, no el rendimiento — ES UNA DECISIÓN, no un hecho
+
+Ésta es la asunción menos obvia y la que más mueve lo que el módulo
+recomienda. El optimizador minimiza, en este orden:
+
+1. tonelada que se queda fuera del horizonte (hoy no muerde: es cero)
+2. **cuándo cierra la línea más cargada** ← manda en la práctica
+3. horas totales de planta
+
+El nivel 2 es lo que empareja las líneas. Y tiene una consecuencia incómoda:
+**para emparejar, a veces hay que mandar material a una línea más lenta.**
+
+Sobre el schedule del 17/09, de los 19 movimientos propuestos:
+
+| | movimientos | tonelada |
+|---|---|---|
+| a una línea **más rápida** | 11 | 92.5 t |
+| prácticamente igual | 4 | — |
+| a una línea **más lenta** | **4** | **20.7 t** |
+
+El peor es ITW-7 → ITW-6 a 16.30 mm: de 849 a **525 kg/h**, un 38 % menos.
+
+Se intentó prohibirlo —«nunca mandes material a una línea más lenta»— y
+**rompió el balanceo**: la prueba `balancea en vez de vaciar la linea lenta`
+falla, porque emparejar ITW-1 contra ITW-7 requiere precisamente devolver
+carga a la línea lenta. No es un error del código: **los dos objetivos son
+incompatibles y hay que elegir uno.**
+
+Medida la alternativa sobre el mismo schedule —mover un rollo **sólo** si
+corre más rápido en otra línea, con el horizonte como límite y sin importar
+el balance:
+
+| objetivo | rollos a mover | horas de corrida ganadas | movimientos a línea más lenta |
+|---|---|---|---|
+| calendario (**hoy**) | 69 | 24.7 h | **4** |
+| rendimiento | 98 | **63.0 h** | **0** |
+
+El de rendimiento gana más del doble de horas y no degrada ningún material,
+pero deja la línea más cargada en 143.9 h — pegada al horizonte de 144 h,
+que es justo el supuesto sin verificar de la sección D.
+
+**Decisión pendiente de Florence.** Mientras no se tome, el módulo sigue
+optimizando calendario, que es lo que se ha estado revisando.
 
 ## 3. Rango de diámetros por línea — RESUELTO
 
@@ -154,6 +250,12 @@ tonelada**: el programa hace las mismas 1 084 t antes y después. Lo que cambia
 es que cierra antes, y esa capacidad liberada valdría esas toneladas **sólo si
 hay órdenes que adelantar**. Si no las hay, la ganancia es terminar antes.
 
+*(La tabla de abajo se midió con el cambio de medida en 45 min, antes de que
+Florence diera el estándar de 30. Con 30 min el escenario vigente cierra en
+**129.6 h → 95.2 h** y la capacidad liberada es **+391 t**. Los otros tres
+escenarios no se volvieron a medir: sirven para comparar entre sí, no como
+cifra final.)*
+
 | escenario | cierre | capacidad liberada |
 |---|---|---|
 | **Deber ser (DEM), el delgado se puede repartir** | **132.1 h → 96.5 h** | **+400 t** |
@@ -193,7 +295,7 @@ Sobre el schedule del 17/09 el aviso dice:
 
 > 29 órdenes (65 130 kg) no traen anotado el devanador. Se calcularon con
 > DEM, que es el deber ser. Si en realidad corrieron con Neturen, el
-> programa no cierra en 132.1 h sino en 167.1 h — 35.1 h más.
+> programa no cierra en 129.6 h sino en 164.6 h — 35.1 h más.
 
 El schedule puede registrar la excepción escribiendo `Neturen` en las notas,
 igual que escribe `DEM`. Si lo hace, el módulo usa esa receta y no avisa.
@@ -202,7 +304,7 @@ igual que escribe `DEM`. Si lo hace, el módulo usa esa receta y no avisa.
 
 Con el DEM como deber ser, la línea base del programa del 17/09 pasa de
 167.1 h a **132.1 h de cierre**, y el incremento por balanceo de +760 t a
-**+400 t**. No es que la oportunidad se haya encogido: es que una parte de
+**+400 t** (con el cambio en 45 min; hoy, con 30 min, son 129.6 h y +391 t). No es que la oportunidad se haya encogido: es que una parte de
 lo que parecía oportunidad era en realidad un supuesto equivocado sobre
 cómo corre ITW-2 hoy.
 
