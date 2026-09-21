@@ -65,9 +65,21 @@ export function esSlm(descripcion) {
   return /\bSLM\b/.test(String(descripcion).toUpperCase());
 }
 
-/** El schedule marca en notas el uso del devanador DEM (aplica a ITW-2). */
+/**
+ * Devanador que indica el schedule, o null si no dice nada.
+ *
+ * El WI pide que se anote el DEM en notas. Se lee tambien el Neturen para
+ * que se pueda registrar la excepcion al deber ser, que es el DEM.
+ *
+ * null NO significa Neturen: significa "no lo anotaron". Quien decide que
+ * hacer con eso es la tabla de recetas (asume el deber ser) y el analisis
+ * (levanta el aviso).
+ */
 export function winderDe(txt) {
-  return /\bDEM\b/.test(String(txt).toUpperCase()) ? 'DEM' : null;
+  const T = String(txt).toUpperCase();
+  if (/\bDEM\b/.test(T)) return 'DEM';
+  if (/\bNETUREN\b/.test(T)) return 'NETUREN';
+  return null;
 }
 
 function mapearColumnas(ws) {

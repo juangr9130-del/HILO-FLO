@@ -10,6 +10,7 @@ import { buscarOportunidades } from '../motor/optimizador.js';
 import { leerVelocidades } from '../ingesta/parametros.js';
 import { leerPrograma } from '../ingesta/schedule.js';
 import { config } from '../config.js';
+import { reunirAvisos } from './avisos.js';
 
 /** Las 14 lineas instaladas mas ITW-15, que esta por instalarse. */
 export const LINEAS_INSTALADAS = Array.from({ length: 14 }, (_, i) => `ITW-${i + 1}`);
@@ -145,6 +146,7 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
       toneladasIncremento: redondear(propuesta.toneladasPorBalanceo, 1),
       toneladasDentroDelHorizonte: redondear(propuesta.deltaToneladas, 2),
       ordenesMovidas: movimientos.reduce((t, m) => t + m.ordenes, 0),
+      avisos: reunirAvisos(programa, lineas, tabla, evaluacion),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
         linea: o.linea,

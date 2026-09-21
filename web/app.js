@@ -146,17 +146,38 @@ function pintarKpis() {
   $('kpis-programacion').innerHTML = bloques.join('');
   $('kpis-analisis').innerHTML = bloques.join('');
 
-  const sr = a.sinReceta;
-  $('aviso-sin-receta').hidden = sr.length === 0;
-  if (sr.length) {
-    const kg = sr.reduce((t, o) => t + o.kilogramos, 0);
-    $('aviso-sin-receta').innerHTML =
-      `<strong>${sr.length} órdenes (${num(kg)} kg) están en una línea que no tiene receta para ese diámetro.</strong>
-       No se les puede calcular tiempo ni rendimiento: ${sr
-         .slice(0, 6)
-         .map((o) => `${o.orden} (${num(o.diametroMm, 2)} mm en ${o.linea})`)
-         .join(', ')}${sr.length > 6 ? `, y ${sr.length - 6} más` : ''}.`;
-  }
+  pintarAvisos(a.avisos ?? []);
+}
+
+/** Los avisos del análisis, del más grave al menos grave. Cada uno trae su
+ *  impacto cuantificado: un aviso sin número se ignora a la tercera vez. */
+function pintarAvisos(avisos) {
+  const caja = $('avisos');
+  if (!avisos.length) return (caja.innerHTML = '');
+  caja.innerHTML = avisos.map((av) => (av.tipo === 'devanador_no_indicado' ? avisoDevanador(av) : avisoSinReceta(av))).join('');
+}
+
+function avisoDevanador(av) {
+  const recorre = av.cierreSiAlterno - av.cierreAsumido;
+  return `<div class="aviso nota">
+    <strong>${av.ordenes} órdenes (${num(av.kilogramos)} kg) no traen anotado el devanador en las notas del schedule.</strong>
+    Se calcularon con <b>${av.asumido}</b>, que es el deber ser.
+    Si en realidad corrieron con ${av.alterno}, el programa no cierra en
+    <b>${num(av.cierreAsumido, 1)} h</b> sino en <b>${num(av.cierreSiAlterno, 1)} h</b>
+    ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h más</b>` : ''}.
+    <div style="margin-top:5px;color:var(--texto-tenue)">
+      ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} órdenes, ${num(l.kilogramos)} kg`).join(' · ')}
+    </div>
+  </div>`;
+}
+
+function avisoSinReceta(av) {
+  const d = av.detalle;
+  return `<div class="aviso error">
+    <strong>${av.ordenes} órdenes (${num(av.kilogramos)} kg) están en una línea que no tiene receta para ese diámetro.</strong>
+    Quedan fuera de todos los totales:
+    ${d.slice(0, 6).map((o) => `${o.orden} (${num(o.diametroMm, 2)} mm en ${o.linea})`).join(', ')}${d.length > 6 ? `, y ${d.length - 6} más` : ''}.
+  </div>`;
 }
 
 function kpi(etiqueta, valor, unidad, pie, clase) {

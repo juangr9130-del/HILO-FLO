@@ -96,9 +96,15 @@ test('devanador y grado eligen la receta de ITW-2', () => {
   assert.equal(tabla().mmS('ITW-2', o(14.7, { winder: 'DEM', grupoGrado: '1065' })), 450);
 });
 
-test('sin devanador indicado gana la receta de planta, no la mas rapida', () => {
-  // Tomar la del DEM inflaria el rendimiento de ITW-2.
-  assert.equal(tabla().mmS('ITW-2', o(14.7, { winder: null, grupoGrado: '9254' })), 275);
+test('sin devanador indicado se asume el DEM, que es el deber ser', () => {
+  // El schedule casi nunca lo anota; asumir Neturen subestimaria ITW-2.
+  // Que no venga anotado lo levanta el aviso, no la tabla de recetas.
+  assert.equal(tabla().mmS('ITW-2', o(14.7, { winder: null, grupoGrado: '9254' })), 375);
+  assert.equal(tabla().mmS('ITW-2', o(14.7, { winder: null, grupoGrado: '1065' })), 450);
+});
+
+test('el schedule puede registrar la excepcion al deber ser', () => {
+  assert.equal(tabla().mmS('ITW-2', o(14.7, { winder: 'NETUREN' })), 275);
 });
 
 test('lineasPara ordena de la mas rapida a la mas lenta', () => {

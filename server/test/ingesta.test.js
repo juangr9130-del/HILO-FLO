@@ -56,8 +56,11 @@ test('SLM solo como palabra completa', () => {
   assert.equal(esSlm('CSW,14.70mm HT HT 1950-2000 MPa'), false);
 });
 
-test('el devanador DEM se lee de las notas', () => {
+test('el devanador se lee de las notas, o queda sin anotar', () => {
   assert.equal(winderDe('usar DEM pan winder'), 'DEM');
+  assert.equal(winderDe('corrio con Neturen winder'), 'NETUREN');
+  // null es "no lo anotaron", no "uso Neturen": lo resuelve el deber ser
+  // y lo reporta el aviso.
   assert.equal(winderDe('sin nota'), null);
 });
 

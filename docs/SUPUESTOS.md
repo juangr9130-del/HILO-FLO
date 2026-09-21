@@ -110,18 +110,29 @@ rápida por hora en delgado.
 
 | escenario | cierre | incremento |
 |---|---|---|
-| El delgado se puede repartir | 167.1 h → 98.2 h | **+760 t** |
-| El delgado se queda en ITW-2 | 167.1 h → 128.4 h | **+327 t** |
-| ITW-2 con devanador DEM | 132.1 h → 96.5 h | **+400 t** |
-| DEM y el delgado amarrado | 132.1 h → 97.1 h | **+391 t** |
+| **Deber ser (DEM), el delgado se puede repartir** | **132.1 h → 96.5 h** | **+400 t** |
+| Deber ser (DEM), el delgado amarrado a ITW-2 | 132.1 h → 97.1 h | +391 t |
+| Si corrieran con Neturen, delgado repartido | 167.1 h → 98.2 h | +760 t |
+| Si corrieran con Neturen, delgado amarrado | 167.1 h → 128.4 h | +327 t |
 
-## 5b. Devanador DEM
+Con el DEM ya confirmado como deber ser (sección 5b), **el escenario vigente
+es el primero: +400 t**. Los dos de Neturen quedan como referencia de lo que
+mediría el aviso si resultara que no lo están usando.
 
-El WI dice que el schedule marca el uso del devanador DEM en la sección de
-notas. En el schedule del 17/09 **ninguna orden lo menciona**, así que todo
-ITW-2 se calcula con la receta Neturen, la más lenta de las tres.
+Nótese que con DEM la concentración del delgado en ITW-2 casi deja de
+importar (+400 contra +391 t): con el devanador correcto, ITW-2 corre el
+delgado lo bastante rápido como para que repartirlo ya no sea la palanca.
+La pregunta de abajo sigue valiendo la pena, pero dejó de ser la más cara.
 
-La diferencia no es pareja: pega justo donde ITW-2 carga su tonelada.
+## 5b. Devanador de ITW-2 — RESUELTO
+
+**Confirmado con Florence: el deber ser es el devanador DEM.** Es lo que el
+módulo calcula por omisión.
+
+El WI pide que el schedule anote el uso del DEM en las notas, pero en la
+práctica casi nunca se anota: en el schedule del 17/09 **ninguna de las 29
+órdenes de ITW-2 lo menciona**. Tomar esa ausencia como "corrió con
+Neturen" subestimaría el rendimiento de ITW-2 hasta a la mitad.
 
 | Ø mm | Neturen | DEM | factor |
 |---|---|---|---|
@@ -130,8 +141,24 @@ La diferencia no es pareja: pega justo donde ITW-2 carga su tonelada.
 | 6.65 / 7.70 / 7.92 | 275 | 375 | 1.36× |
 | 9.40 en adelante | 275 → 170 | igual | 1.00× |
 
-**Pregunta:** ¿cómo se decide en el piso qué devanador usa ITW-2? ¿Queda
-registrado en algún lado, o es algo que el operador escoge?
+**Que no venga anotado no se ignora: levanta un aviso**, con las órdenes
+afectadas y con lo que costaría si de verdad hubieran corrido con Neturen.
+Sobre el schedule del 17/09 el aviso dice:
+
+> 29 órdenes (65 130 kg) no traen anotado el devanador. Se calcularon con
+> DEM, que es el deber ser. Si en realidad corrieron con Neturen, el
+> programa no cierra en 132.1 h sino en 167.1 h — 35.1 h más.
+
+El schedule puede registrar la excepción escribiendo `Neturen` en las notas,
+igual que escribe `DEM`. Si lo hace, el módulo usa esa receta y no avisa.
+
+### Lo que cambió en los números
+
+Con el DEM como deber ser, la línea base del programa del 17/09 pasa de
+167.1 h a **132.1 h de cierre**, y el incremento por balanceo de +760 t a
+**+400 t**. No es que la oportunidad se haya encogido: es que una parte de
+lo que parecía oportunidad era en realidad un supuesto equivocado sobre
+cómo corre ITW-2 hoy.
 
 ## 6. Diámetro: ¿estirado o terminado?
 

@@ -10,10 +10,24 @@
  *   Programa el conjunto de ordenes del horizonte que se esta programando.
  */
 
-/** Devanador que corre la linea cuando el schedule no indica otra cosa.
- *  El WI solo tabula el DEM para ITW-2, y su nota dice que el schedule lo
- *  marca en la seccion de notas; sin esa marca, corre el Neturen. */
-export const WINDER_PREDETERMINADO = 'NETUREN';
+/**
+ * Devanador que se asume cuando el schedule no indica cual se uso.
+ *
+ * El deber ser en Florence es el DEM, confirmado con planta, asi que es lo
+ * que se calcula por omision. El WI dice que el schedule marca el DEM en la
+ * seccion de notas, pero en la practica casi nunca lo anota: tomar esa
+ * ausencia como "corrio con Neturen" subestimaria el rendimiento de ITW-2
+ * hasta a la mitad (2.18x de diferencia a 5.72 mm).
+ *
+ * Que no venga anotado no se ignora: el analisis levanta un aviso con las
+ * ordenes afectadas y con lo que costaria el cierre del programa si de
+ * verdad hubieran corrido con Neturen. Ver servicio/analisis.js.
+ */
+export const WINDER_PREDETERMINADO = 'DEM';
+
+/** El otro devanador. El schedule lo puede indicar explicitamente para
+ *  registrar la excepcion al deber ser. */
+export const WINDER_ALTERNO = 'NETUREN';
 
 /** BB001 -> ITW-1. Si no reconoce el patron, regresa el texto tal cual. */
 export function workCenterALinea(workCenter) {
