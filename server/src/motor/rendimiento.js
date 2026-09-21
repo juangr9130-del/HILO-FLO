@@ -106,7 +106,19 @@ export class TablaVelocidades {
   }
 
   _buscarReceta(linea, orden) {
-    const candidatos = (this.porLinea.get(linea) ?? []).filter((p) => p.aplicaA(orden));
+    const conDeberSer = this._buscarConDevanador(linea, orden, undefined);
+    if (conDeberSer || orden.winder !== null) return conDeberSer;
+    // El schedule no anoto el devanador y el deber ser no esta tabulado para
+    // ese diametro. Antes que dar la orden por imposible de correr, se usa la
+    // receta que si exista: un hueco del documento no es una incapacidad de
+    // la linea. El aviso del analisis reporta que no venia anotado.
+    return this._buscarConDevanador(linea, orden, null);
+  }
+
+  _buscarConDevanador(linea, orden, winderEsperado) {
+    const candidatos = (this.porLinea.get(linea) ?? []).filter((p) =>
+      p.aplicaA(orden, winderEsperado),
+    );
     if (!candidatos.length) return null;
     const diametro = this._resolverDiametro(candidatos, orden.diametroMm);
     if (diametro === null) return null;

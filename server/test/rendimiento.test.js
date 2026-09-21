@@ -134,3 +134,21 @@ test('la cache no cambia el resultado', () => {
   // Dos ordenes distintas con la misma firma comparten entrada de cache
   assert.equal(t.kgHora('ITW-1', o(14.7, { id: 'Y' })), primera);
 });
+
+test('un hueco del documento no deja a la orden sin receta', () => {
+  // ITW-2 con receta Neturen pero sin DEM para ese grado. El deber ser es
+  // DEM; antes que dar la orden por imposible, se usa la que si existe.
+  const t = new TablaVelocidades([
+    punto('ITW-2', 7.0, 275, { winder: 'NETUREN' }),
+    punto('ITW-2', 7.0, 600, { winder: 'DEM', grado: '9254' }),
+  ]);
+  assert.equal(t.mmS('ITW-2', o(7.0, { grupoGrado: '9254' })), 600); // deber ser
+  assert.equal(t.mmS('ITW-2', o(7.0, { grupoGrado: '1065' })), 275); // sin DEM: no se pierde
+});
+
+test('si el schedule si anota el devanador, no hay respaldo', () => {
+  // Aqui la ausencia de receta es real, no un hueco: se pidio DEM explicito.
+  const t = new TablaVelocidades([punto('ITW-2', 7.0, 275, { winder: 'NETUREN' })]);
+  assert.equal(t.mmS('ITW-2', o(7.0, { winder: 'DEM' })), null);
+  assert.equal(t.mmS('ITW-2', o(7.0, { winder: 'NETUREN' })), 275);
+});

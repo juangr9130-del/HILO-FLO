@@ -197,6 +197,19 @@ CREATE TABLE flo_analisis (
     factor_produccion       DECIMAL(6,3)  NOT NULL,  -- makespan_actual / makespan_propuesto
     toneladas_incremento    DECIMAL(10,2) NOT NULL,
     ordenes_movidas         INT           NOT NULL DEFAULT 0,
+    /* Instantanea exacta de lo que se le mostro al programador ese dia.
+
+       Las columnas de arriba y las dos tablas que siguen son la version
+       consultable (para BI, para cruzar folios, para sacar promedios). Esta
+       columna es la version fiel: el mismo JSON que consumio la pantalla,
+       con el detalle por corrida y los avisos, que no se normalizan porque
+       nadie los va a consultar por SQL.
+
+       Es duplicacion a proposito. Sin ella, repintar un folio de hace tres
+       meses obligaria a recalcularlo, y el resultado ya no seria el que se
+       vio: las recetas o los parametros de linea pudieron cambiar desde
+       entonces. Un folio tiene que poder defenderse tal como se emitio. */
+    paquete                 NVARCHAR(MAX) NULL,
     CONSTRAINT FK_flo_analisis_programa FOREIGN KEY (programa_id) REFERENCES flo_programa(programa_id),
     CONSTRAINT FK_flo_analisis_cuello FOREIGN KEY (cuello_botella_id) REFERENCES cat_linea(linea_id)
 );

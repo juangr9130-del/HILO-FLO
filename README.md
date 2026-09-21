@@ -85,3 +85,4 @@ de planta, así que corren sin necesidad de los documentos reales.
 - [`docs/DOMINIO.md`](docs/DOMINIO.md) — cómo está armado cada archivo de planta y cómo se interpreta.
 - [`docs/SUPUESTOS.md`](docs/SUPUESTOS.md) — lo que se dio por hecho y lo que falta confirmar con Florence.
 - [`docs/FORMATO_DATOS.md`](docs/FORMATO_DATOS.md) — contrato de columnas de cada Excel.
+- [`docs/VALIDACION.md`](docs/VALIDACION.md) — qué falta para dar el módulo por bueno.

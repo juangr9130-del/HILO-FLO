@@ -153,8 +153,18 @@ cuánto cierra el programa**. Si hoy cierra en 167 h porque una línea va
 sobrecargada y balanceado cierra en 98 h, en el mismo calendario caben 1.70
 veces las toneladas.
 
-Un movimiento nunca se acepta si cuesta tonelada, y nunca si atrasa el cierre
-del programa.
+**La invariante real es una sola: un movimiento nunca se acepta si cuesta
+tonelada.** El cierre sólo desempata entre movimientos que empatan en
+tonelada.
+
+No es lo mismo que decir "nunca atrasa el cierre", y la diferencia importa.
+Si una orden está programada en una línea sin receta para su diámetro, hoy
+no se produce: mueve 2.3 t que valían cero, aunque la línea que la reciba
+tarde más y el programa cierre después. El nivel 1 manda sobre el 2 a
+propósito — producir vale más que cerrar temprano.
+
+Cuando todas las órdenes ya se producen, que es el caso normal, la tonelada
+no cambia y entonces sí: el reajuste nunca atrasa el cierre.
 
 Lo que se reporta es el **neto** entre el schedule original y el propuesto,
 no la bitácora de jugadas: la búsqueda local a veces mueve una orden y

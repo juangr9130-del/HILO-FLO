@@ -165,15 +165,16 @@ export class RepositorioSql {
         .input('factor', sql.Decimal(6, 3), a.factorProduccion)
         .input('toneladas', sql.Decimal(10, 2), a.toneladasIncremento)
         .input('movidas', sql.Int, a.ordenesMovidas)
+        .input('paquete', sql.NVarChar(sql.MAX), JSON.stringify(registro))
         .query(
           `INSERT INTO flo_analisis
              (programa_id, horas_disponibles, eficiencia, minutos_cambio,
               makespan_actual_h, makespan_propuesto_h, cuello_botella_id,
               horas_totales_actual, horas_totales_propuesto,
-              factor_produccion, toneladas_incremento, ordenes_movidas)
+              factor_produccion, toneladas_incremento, ordenes_movidas, paquete)
            OUTPUT INSERTED.analisis_id
            VALUES (@programa_id, @horas, @eficiencia, @minutos, @ms_actual, @ms_prop,
-                   @cuello, @ht_actual, @ht_prop, @factor, @toneladas, @movidas)`,
+                   @cuello, @ht_actual, @ht_prop, @factor, @toneladas, @movidas, @paquete)`,
         );
       const analisisId = an.recordset[0].analisis_id;
 
@@ -226,19 +227,48 @@ export class RepositorioSql {
     }
   }
 
+  /**
+   * Devuelve exactamente el mismo paquete que RepositorioMemoria, para que
+   * la pantalla no tenga que saber cual de los dos tiene detras.
+   *
+   * Sale de la instantanea guardada en flo_analisis.paquete, no de
+   * recalcular: un folio se repinta como se emitio, aunque las recetas o los
+   * parametros de linea hayan cambiado desde entonces.
+   *
+   * Lo unico que se superpone encima son las marcas de aceptado, porque esas
+   * son anotaciones posteriores del programador y no parte del analisis
+   * original.
+   */
   async leerPrograma(folio) {
     const r = await this.pool
       .request()
       .input('folio', sql.VarChar(20), folio)
       .query(
-        `SELECT TOP 1 p.programa_id, p.folio, p.archivo_nombre, p.cargado_en, p.cargado_por,
-                p.ordenes, p.kilogramos, a.analisis_id
+        `SELECT TOP 1 a.analisis_id, a.paquete
            FROM flo_programa p
-           LEFT JOIN flo_analisis a ON a.programa_id = p.programa_id
+           JOIN flo_analisis a ON a.programa_id = p.programa_id
           WHERE p.folio = @folio
           ORDER BY a.analisis_id DESC`,
       );
-    return r.recordset[0] ?? null;
+    const fila = r.recordset[0];
+    if (!fila?.paquete) return null;
+
+    const paquete = JSON.parse(fila.paquete);
+
+    const marcas = await this.pool
+      .request()
+      .input('analisis_id', sql.Int, fila.analisis_id)
+      .query(
+        `SELECT orden_sugerencia, aceptado FROM flo_movimiento
+          WHERE analisis_id = @analisis_id AND aceptado IS NOT NULL`,
+      );
+    const porOrden = new Map(
+      marcas.recordset.map((m) => [m.orden_sugerencia, Boolean(m.aceptado)]),
+    );
+    for (const m of paquete.analisis?.movimientos ?? []) {
+      if (porOrden.has(m.id)) m.aceptado = porOrden.get(m.id);
+    }
+    return paquete;
   }
 
   async listarProgramas() {
@@ -253,15 +283,26 @@ export class RepositorioSql {
     return r.recordset;
   }
 
-  async marcarMovimiento(folio, movimientoId, aceptado) {
+  /**
+   * La pantalla identifica cada consejo por su lugar en la lista (1 = el de
+   * mayor impacto), no por el IDENTITY de la tabla, que no conoce. Por eso
+   * se busca por folio + orden_sugerencia.
+   */
+  async marcarMovimiento(folio, ordenSugerencia, aceptado) {
     const r = await this.pool
       .request()
-      .input('id', sql.Int, movimientoId)
+      .input('folio', sql.VarChar(20), folio)
+      .input('orden', sql.SmallInt, ordenSugerencia)
       .input('aceptado', sql.Bit, aceptado)
       .query(
-        `UPDATE flo_movimiento SET aceptado = @aceptado
-          OUTPUT INSERTED.movimiento_id WHERE movimiento_id = @id`,
+        `UPDATE m SET aceptado = @aceptado
+           OUTPUT INSERTED.movimiento_id, INSERTED.orden_sugerencia, INSERTED.aceptado
+           FROM flo_movimiento m
+           JOIN flo_analisis a ON a.analisis_id = m.analisis_id
+           JOIN flo_programa p ON p.programa_id = a.programa_id
+          WHERE p.folio = @folio AND m.orden_sugerencia = @orden`,
       );
-    return r.recordset[0] ?? null;
+    const fila = r.recordset[0];
+    return fila ? { id: fila.orden_sugerencia, aceptado: Boolean(fila.aceptado) } : null;
   }
 }

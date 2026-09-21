@@ -51,11 +51,13 @@ export class RepositorioMemoria {
       .sort((a, b) => String(b.cargadoEn).localeCompare(String(a.cargadoEn)));
   }
 
-  async marcarMovimiento(folio, movimientoId, aceptado) {
+  /** Misma firma y misma respuesta que RepositorioSql: la pantalla identifica
+   *  el consejo por su lugar en la lista, no por un id de tabla. */
+  async marcarMovimiento(folio, ordenSugerencia, aceptado) {
     const p = this.programas.get(folio);
-    const m = p?.analisis?.movimientos?.find((x) => x.id === movimientoId);
+    const m = p?.analisis?.movimientos?.find((x) => x.id === ordenSugerencia);
     if (!m) return null;
     m.aceptado = aceptado;
-    return m;
+    return { id: m.id, aceptado };
   }
 }

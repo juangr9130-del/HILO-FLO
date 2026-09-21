@@ -100,17 +100,24 @@ export class PuntoVelocidad {
   }
 
   /** True si esta receta es usable para la orden. */
-  aplicaA(orden) {
-    if (this.winder !== null) {
-      // Sin devanador indicado en el schedule solo aplica la receta del
-      // devanador de planta; tomar la del DEM inflaria el rendimiento.
-      const esperado = orden.winder ?? WINDER_PREDETERMINADO;
-      if (this.winder !== esperado) return false;
-    }
+  /**
+   * True si esta receta es usable para la orden.
+   *
+   * @param orden
+   * @param winderEsperado  devanador que se exige; null acepta cualquiera.
+   *   Lo decide TablaVelocidades, no la receta: primero se busca con el
+   *   deber ser y solo si ese diametro no esta tabulado se reintenta
+   *   abierto, para no perder una orden por un hueco del documento.
+   */
+  aplicaA(orden, winderEsperado = undefined) {
+    const esperado =
+      winderEsperado === undefined ? (orden.winder ?? WINDER_PREDETERMINADO) : winderEsperado;
+    if (this.winder !== null && esperado !== null && this.winder !== esperado) return false;
     if (this.grado !== null && this.grado !== orden.grupoGrado) return false;
     if (this.slm !== null && this.slm !== orden.slm) return false;
     return true;
   }
+
 
   /** Cuantos discriminantes fija. Gana la receta mas especifica. */
   get especificidad() {
