@@ -77,4 +77,14 @@ export class RepositorioMemoria {
     m.aceptado = aceptado;
     return { id: m.id, aceptado };
   }
+
+  /** Lo que el programador decidio de cada consejo. Lo usa la exportacion. */
+  async leerMovimientos(folio) {
+    const p = this.programas.get(folio);
+    const decisiones = new Map();
+    for (const m of p?.analisis?.movimientos ?? []) {
+      if (m.aceptado !== null && m.aceptado !== undefined) decisiones.set(m.id, m.aceptado);
+    }
+    return decisiones;
+  }
 }

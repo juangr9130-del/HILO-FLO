@@ -176,6 +176,41 @@ export function crearApi(repo) {
     }
   });
 
+  /* ---------- Exportar a Excel ---------- */
+
+  /**
+   * El schedule reajustado, para mandarlo por correo.
+   *
+   * El estado de cada consejo (aceptado / no aplica) vive en la base, no en
+   * el paquete guardado, asi que se vuelve a pegar aqui antes de exportar:
+   * el archivo tiene que reflejar lo que el programador decidio, aunque haya
+   * decidido despues de que se guardo el folio.
+   */
+  api.get('/programas/:folio/excel', async (req, res, siguiente) => {
+    try {
+      const p = await repo.leerPrograma(req.params.folio);
+      if (!p) return res.status(404).json({ error: `Ticket ${req.params.folio} does not exist.` });
+
+      const decisiones = await repo.leerMovimientos?.(req.params.folio);
+      if (decisiones) {
+        for (const m of p.analisis.movimientos) {
+          if (decisiones.has(m.id)) m.aceptado = decisiones.get(m.id);
+        }
+      }
+
+      const { exportarPrograma, nombreArchivo } = await import('../servicio/exportar.js');
+      const bytes = exportarPrograma(p);
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo(p)}"`);
+      res.send(Buffer.from(bytes));
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
   /* ---------- Matriz de rendimiento ---------- */
 
   api.get('/programas/:folio/rendimiento', async (req, res, siguiente) => {

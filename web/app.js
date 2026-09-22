@@ -162,6 +162,13 @@ const analisis = montarAnalisis({
   },
 });
 
+// El archivo lo arma el servidor: ahí vive el estado de qué consejos aceptó
+// el programador, que puede haber cambiado después de guardar el folio.
+$('exportar').addEventListener('click', () => {
+  if (!paquete) return;
+  window.location.href = `/api/programas/${paquete.folio}/excel`;
+});
+
 // ---------------------------------------------------------------------------
 // Navegación
 // ---------------------------------------------------------------------------

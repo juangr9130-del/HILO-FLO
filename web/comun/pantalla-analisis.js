@@ -528,8 +528,30 @@ function montarAnalisis(api = {}) {
         const m = paquete.analisis.movimientos.find((x) => x.id === Number(fila.dataset.id));
         if (m) m.aceptado = aceptado;
         api.marcarMovimiento?.(Number(fila.dataset.id), aceptado);
+        revisarExportar();
       });
     }
+    revisarExportar();
+  }
+
+  /**
+   * El boton de exportar.
+   *
+   * Solo se prende cuando hay al menos un consejo aceptado: el archivo lleva
+   * los movimientos que el programador MARCO, asi que sin nada marcado saldria
+   * identico al que subio y no tendria caso mandarlo por correo.
+   */
+  function revisarExportar() {
+    const boton = $('exportar');
+    if (!boton) return;
+    const aceptados = (paquete?.analisis.movimientos ?? []).filter((m) => m.aceptado === true);
+    boton.disabled = aceptados.length === 0;
+    boton.textContent = aceptados.length
+      ? `Export to Excel (${aceptados.length} ${aceptados.length === 1 ? 'move' : 'moves'})`
+      : 'Export to Excel';
+    boton.title = aceptados.length
+      ? 'The schedule in the same format you uploaded, with the accepted moves applied'
+      : 'Mark at least one move as "Will do" first';
   }
 
   /**
@@ -877,5 +899,8 @@ function montarAnalisis(api = {}) {
     get paquete() {
       return paquete;
     },
+
+    /** Vuelve a evaluar si se puede exportar (tras reabrir un folio). */
+    revisarExportar,
   };
 }

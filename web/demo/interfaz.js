@@ -279,6 +279,32 @@ $('hoja-corridas').addEventListener('click', (ev) => {
   if (fila) analisis.alternarCorrida(fila.dataset.corrida);
 });
 
+// --- exportar a Excel --------------------------------------------------------
+// Aquí no hay servidor: el mismo escritor que usa el módulo instalado corre
+// en el navegador y el archivo se descarga sin que nada salga de la máquina.
+
+$('exportar').addEventListener('click', () => {
+  const p = analisis.paquete;
+  if (!p) return;
+  try {
+    const bytes = exportarPrograma(p);
+    const url = URL.createObjectURL(
+      new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo(p);
+    a.click();
+    // Sin esto el blob se queda en memoria hasta que se cierre la pestaña.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    guardarEstado();
+  } catch (e) {
+    mostrarError(`Could not build the file: ${e.message}`);
+  }
+});
+
 function mostrarError(mensaje) {
   $('error').textContent = mensaje;
   $('error').hidden = false;

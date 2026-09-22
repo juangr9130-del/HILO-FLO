@@ -603,7 +603,11 @@ table.rollos td.notas {
     </div>
 
     <div class="tarjeta">
-      <h2>What to do <small>ranked by impact</small></h2>
+      <h2>What to do <small>ranked by impact</small>
+        <span style="float:right;font-weight:400">
+          <button class="secundario" id="exportar" disabled>Export to Excel</button>
+        </span>
+      </h2>
       <div id="consejos"></div>
     </div>
 
@@ -3018,6 +3022,236 @@ function valorDeCelda(celda, compartidas) {
   return Number.isFinite(n) ? n : bruto;
 }
 
+// ===== src/xlsx/escritor.js ==========================================
+
+/**
+ * Escritor de .xlsx sin dependencias, hermano de lector.js.
+ *
+ * El servidor podria usar exceljs, pero el modulo demo corre en el navegador
+ * sin nada instalado, y el archivo que sale de los dos tiene que ser
+ * identico: es el que el programador manda por correo. Un solo escritor.
+ *
+ * Un .xlsx es un ZIP de XML. Se guarda SIN COMPRIMIR (metodo STORED): es
+ * valido, Excel lo abre igual, y ahorra tener que implementar deflate o
+ * depender de CompressionStream, que no esta en todos lados. Un schedule de
+ * 500 renglones pesa unos 200 KB asi, que para adjuntar a un correo sobra.
+ *
+ * Los textos van como inlineStr y no en la tabla de cadenas compartidas:
+ * mas bytes, pero nada de indices que mantener cuadrados.
+ */
+
+const TABLA_CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = TABLA_CRC[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+const utf8 = (s) => new TextEncoder().encode(s);
+
+/** & < > " ' dentro de un valor XML. */
+function escapar(texto) {
+  return String(texto)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+    // Excel no abre el archivo si trae caracteres de control; el schedule de
+    // SAP a veces los arrastra en las notas.
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+}
+
+/** Numero de columna (1) -> letra (A). */
+function letraColumna(n) {
+  let s = '';
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = (n - r - 1) / 26;
+  }
+  return s;
+}
+
+function celdaXml(valor, fila, columna, estilo) {
+  const ref = `${letraColumna(columna)}${fila}`;
+  const s = estilo ? ` s="${estilo}"` : '';
+  if (valor === null || valor === undefined || valor === '') return '';
+  if (typeof valor === 'number' && Number.isFinite(valor)) {
+    return `<c r="${ref}"${s}><v>${valor}</v></c>`;
+  }
+  return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${escapar(valor)}</t></is></c>`;
+}
+
+/**
+ * Una hoja.
+ *
+ * @param {object} hoja
+ *   nombre    como aparece en la pestana
+ *   filas     [[valor, ...], ...]; null o '' deja la celda vacia
+ *   estilos   [[indice, ...], ...] paralelo a filas, opcional
+ *   anchos    ancho de cada columna en caracteres, opcional
+ *   combinar  ['A1:I1', ...], opcional
+ */
+function hojaXml({ filas, estilos = [], anchos = [], combinar = [] }) {
+  const cols = anchos.length
+    ? `<cols>${anchos
+        .map((a, i) => `<col min="${i + 1}" max="${i + 1}" width="${a}" customWidth="1"/>`)
+        .join('')}</cols>`
+    : '';
+  const cuerpo = filas
+    .map((fila, i) => {
+      const n = i + 1;
+      const celdas = fila
+        .map((v, j) => celdaXml(v, n, j + 1, estilos[i]?.[j]))
+        .join('');
+      return `<row r="${n}">${celdas}</row>`;
+    })
+    .join('');
+  const fusiones = combinar.length
+    ? `<mergeCells count="${combinar.length}">${combinar.map((r) => `<mergeCell ref="${r}"/>`).join('')}</mergeCells>`
+    : '';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${cols}<sheetData>${cuerpo}</sheetData>${fusiones}</worksheet>`;
+}
+
+/**
+ * Los cuatro estilos que usa el modulo. El indice es la posicion en cellXfs:
+ *   0 normal   1 titulo   2 encabezado   3 total   4 resaltado (movido)
+ */
+const ESTILOS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="4">
+<font><sz val="11"/><name val="Calibri"/></font>
+<font><b/><sz val="14"/><color rgb="FF1B3A66"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/></font>
+</fonts>
+<fills count="4">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF1B3A66"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFDEBD9"/><bgColor indexed="64"/></patternFill></fill>
+</fills>
+<borders count="2">
+<border><left/><right/><top/><bottom/><diagonal/></border>
+<border><left/><right/><top style="thin"><color rgb="FF1B3A66"/></top><bottom/><diagonal/></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="5">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
+</cellXfs>
+</styleSheet>`;
+
+const ESTILO = { NORMAL: 0, TITULO: 1, ENCABEZADO: 2, TOTAL: 3, MOVIDO: 4 };
+
+/**
+ * Arma el .xlsx.
+ *
+ * @param {object[]} hojas  ver hojaXml
+ * @returns {Uint8Array} el archivo listo para descargar o mandar
+ */
+function construirXlsx(hojas) {
+  const n = hojas.length;
+  const archivos = [
+    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+${hojas.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('\n')}
+</Types>`],
+    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>${hojas.map((h, i) => `<sheet name="${escapar(h.nombre)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets>
+</workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${hojas.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('\n')}
+<Relationship Id="rId${n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`],
+    ['xl/styles.xml', ESTILOS],
+    ...hojas.map((h, i) => [`xl/worksheets/sheet${i + 1}.xml`, hojaXml(h)]),
+  ];
+
+  return empaquetarZip(archivos.map(([nombre, texto]) => [nombre, utf8(texto)]));
+}
+
+/** ZIP con entradas STORED. Suficiente para lo que Excel necesita. */
+function empaquetarZip(entradas) {
+  const locales = [];
+  const central = [];
+  let offset = 0;
+
+  for (const [nombre, datos] of entradas) {
+    const n = utf8(nombre);
+    const crc = crc32(datos);
+    const local = new Uint8Array(30 + n.length + datos.length);
+    const v = new DataView(local.buffer);
+    v.setUint32(0, 0x04034b50, true);
+    v.setUint16(4, 20, true); // version necesaria
+    v.setUint16(8, 0, true); // metodo 0 = STORED
+    v.setUint32(14, crc, true);
+    v.setUint32(18, datos.length, true);
+    v.setUint32(22, datos.length, true);
+    v.setUint16(26, n.length, true);
+    local.set(n, 30);
+    local.set(datos, 30 + n.length);
+    locales.push(local);
+
+    const dir = new Uint8Array(46 + n.length);
+    const dv = new DataView(dir.buffer);
+    dv.setUint32(0, 0x02014b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 20, true);
+    dv.setUint16(10, 0, true);
+    dv.setUint32(16, crc, true);
+    dv.setUint32(20, datos.length, true);
+    dv.setUint32(24, datos.length, true);
+    dv.setUint16(28, n.length, true);
+    dv.setUint32(42, offset, true);
+    dir.set(n, 46);
+    central.push(dir);
+
+    offset += local.length;
+  }
+
+  const tamCentral = central.reduce((t, c) => t + c.length, 0);
+  const fin = new Uint8Array(22);
+  const fv = new DataView(fin.buffer);
+  fv.setUint32(0, 0x06054b50, true);
+  fv.setUint16(8, entradas.length, true);
+  fv.setUint16(10, entradas.length, true);
+  fv.setUint32(12, tamCentral, true);
+  fv.setUint32(16, offset, true);
+
+  const total = offset + tamCentral + 22;
+  const salida = new Uint8Array(total);
+  let p = 0;
+  for (const b of locales) { salida.set(b, p); p += b.length; }
+  for (const b of central) { salida.set(b, p); p += b.length; }
+  salida.set(fin, p);
+  return salida;
+}
+
 // ===== src/servicio/avisos.js ========================================
 
 /**
@@ -3634,6 +3868,218 @@ function matrizRendimiento(tabla, programa) {
   return { lineas, filas };
 }
 
+// ===== src/servicio/exportar.js ======================================
+
+/**
+ * El schedule reajustado, de vuelta en Excel.
+ *
+ * El analisis no sirve de nada si se queda en la pantalla: el programador
+ * tiene que mandarlo por correo y que del otro lado lo lean sin explicaciones.
+ * Por eso la hoja principal sale con EL MISMO formato que entro -- mismo
+ * titulo, mismos nueve encabezados, mismos subtotales por work center -- y lo
+ * unico que cambia es el work center de las ordenes cuyo movimiento se
+ * ACEPTO. Asi el archivo se puede volver a subir al modulo, o pegar en SAP,
+ * sin traducir nada.
+ *
+ * Lo que se agrega va DESPUES de la novena columna, para no correr las que ya
+ * existian, y en una segunda hoja con el resumen. Un lector que solo conozca
+ * el formato de SAP ignora lo de mas y sigue funcionando.
+ *
+ * Solo se aplican los movimientos aceptados. Un consejo que el programador no
+ * marco no se toca: el archivo tiene que reflejar lo que EL decidio, no lo
+ * que el algoritmo propuso.
+ */
+
+
+
+
+/** Los nueve encabezados del schedule de SAP, en su orden. */
+const ENCABEZADOS = [
+  'Work Center',
+  'Material Number',
+  'Material Description',
+  'Important Notes',
+  'Order',
+  'PO Printed Yes/No',
+  'Drawn Yes/No',
+  'Operation Quantity (MEINH)',
+  'Customer PO',
+];
+
+/** Lo que el modulo agrega al final, para que el cambio se explique solo. */
+const ENCABEZADOS_EXTRA = ['Previous Work Center', 'Change', 'Reason'];
+
+/**
+ * Las ordenes que de verdad se mueven: solo las de movimientos aceptados.
+ *
+ * @returns {Map<string, {destino: string, movimiento: object}>} por id de orden
+ */
+function movimientosAceptados(paquete) {
+  const porOrden = new Map();
+  for (const m of paquete.analisis.movimientos) {
+    if (m.aceptado !== true) continue;
+    for (const folio of m.folios) porOrden.set(String(folio), { destino: m.destino, movimiento: m });
+  }
+  return porOrden;
+}
+
+/**
+ * Texto corto que explica por que se movio esa orden.
+ *
+ * El kg/h sale de los kilos y las horas que ya trae el movimiento, para no
+ * volver a consultar la tabla de recetas desde aqui: el paquete tiene que
+ * bastarse solo, que es lo que permite reexportar un folio viejo.
+ */
+function motivo(m) {
+  const origen = m.horasOrigen > 0 ? m.kilogramos / m.horasOrigen : 0;
+  const destino = m.horasDestino > 0 ? m.kilogramos / m.horasDestino : 0;
+  if (!origen || !destino) return `Rebalanced from ${m.origen} to ${m.destino}`;
+  const pct = redondear((destino / origen - 1) * 100, 0);
+  return `${Math.round(origen)} to ${Math.round(destino)} kg/h (${pct > 0 ? '+' : ''}${pct}%)`;
+}
+
+/**
+ * La hoja principal: el schedule con los movimientos aceptados aplicados.
+ *
+ * Se reagrupa por work center, porque de eso vive el formato: SAP entrega un
+ * bloque por linea con su subtotal. Una orden movida aparece en el bloque de
+ * su linea NUEVA, que es donde la va a buscar quien lea el archivo.
+ */
+function hojaSchedule(paquete, aceptados) {
+  const filas = [];
+  const estilos = [];
+  const titulo = `CSW Production Schedule — ticket ${paquete.folio}`;
+
+  filas.push([titulo]);
+  estilos.push([ESTILO.TITULO]);
+  filas.push([...ENCABEZADOS, ...ENCABEZADOS_EXTRA]);
+  estilos.push(new Array(ENCABEZADOS.length + ENCABEZADOS_EXTRA.length).fill(ESTILO.ENCABEZADO));
+
+  // Cada orden a su work center final
+  const porLinea = new Map();
+  for (const o of paquete.detalleOrdenes) {
+    const mov = aceptados.get(String(o.id));
+    const linea = mov ? mov.destino : o.linea;
+    if (!porLinea.has(linea)) porLinea.set(linea, []);
+    porLinea.get(linea).push({ orden: o, mov });
+  }
+
+  const claves = [...porLinea.keys()].sort(
+    (a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')),
+  );
+
+  let granTotal = 0;
+  for (const linea of claves) {
+    const wc = lineaAWorkCenter(linea);
+    let subtotal = 0;
+    for (const { orden: o, mov } of porLinea.get(linea)) {
+      subtotal += o.kilogramos;
+      filas.push([
+        wc,
+        o.material ?? '',
+        o.descripcion ?? '',
+        o.notas ?? '',
+        o.id,
+        '',
+        '',
+        o.kilogramos,
+        o.clientePo ?? '',
+        mov ? lineaAWorkCenter(mov.movimiento.origen) : '',
+        mov ? 'MOVED' : '',
+        mov ? motivo(mov.movimiento) : '',
+      ]);
+      // El renglon movido se resalta: quien recibe el correo tiene que ver
+      // de un vistazo que cambio y que no.
+      estilos.push(mov ? new Array(12).fill(ESTILO.MOVIDO) : []);
+    }
+    // Subtotal del bloque, igual que lo entrega SAP.
+    filas.push([wc, 'nan', 'nan', '', 0, '', '', redondear(subtotal, 0), '']);
+    estilos.push(new Array(9).fill(ESTILO.TOTAL));
+    granTotal += subtotal;
+  }
+
+  filas.push(['nan', 'nan', 'nan', '', 0, '', '', redondear(granTotal, 0), '']);
+  estilos.push(new Array(9).fill(ESTILO.TOTAL));
+
+  return {
+    nombre: 'Sheet1',
+    filas,
+    estilos,
+    anchos: [12, 14, 40, 44, 12, 16, 14, 22, 14, 18, 10, 26],
+    combinar: ['A1:I1'],
+  };
+}
+
+/** La segunda hoja: que se decidio, cuanto se gana y con que supuestos. */
+function hojaResumen(paquete, aceptados) {
+  const a = paquete.analisis;
+  const filas = [];
+  const estilos = [];
+  const seccion = (t) => { filas.push([t]); estilos.push([ESTILO.TITULO]); };
+  const par = (k, v) => { filas.push([k, v]); estilos.push([]); };
+
+  seccion(`HILO-FLO — ticket ${paquete.folio}`);
+  par('Source file', paquete.archivo ?? '');
+  par('Analyzed', paquete.cargadoEn ?? '');
+  par('Orders', paquete.ordenes);
+  par('Tons', a.toneladasActuales);
+  filas.push([]); estilos.push([]);
+
+  seccion('What this rebalance gains');
+  par('Plant rate now (kg/h)', a.ritmoActual);
+  par('Plant rate rebalanced (kg/h)', a.ritmoPropuesto);
+  par('Line hours saved', a.horasAhorradas);
+  par('Worth in product (t)', a.toneladasPorTiempo);
+  par('Program finishes in (h)', a.makespanPropuesto);
+  filas.push([]); estilos.push([]);
+
+  seccion('Assumptions');
+  par('Objective', a.objetivo ?? paquete.supuestos?.objetivo ?? '');
+  par('Hours available per line', paquete.supuestos?.horasDisponibles ?? '');
+  par('Changeover (min)', paquete.supuestos?.minutosCambio ?? '');
+  par('Max change per line (coils)', paquete.supuestos?.topeOrdenes ?? '');
+  par('Line speeds', `${paquete.recetas ?? ''} recipes`);
+  filas.push([]); estilos.push([]);
+
+  seccion('Moves');
+  filas.push(['#', 'From', 'To', 'Ø mm', 'Coils', 'kg', 'Hours freed', 'Decision']);
+  estilos.push(new Array(8).fill(ESTILO.ENCABEZADO));
+  for (const m of a.movimientos) {
+    filas.push([
+      m.id,
+      m.origen,
+      m.destino,
+      m.diametroMm,
+      m.ordenes,
+      m.kilogramos,
+      m.horasLiberadas,
+      m.aceptado === true ? 'ACCEPTED' : m.aceptado === false ? 'not applicable' : 'not decided',
+    ]);
+    estilos.push(m.aceptado === true ? new Array(8).fill(ESTILO.MOVIDO) : []);
+  }
+  filas.push([]); estilos.push([]);
+  par('Coils actually moved in this file', [...aceptados.keys()].length);
+
+  return { nombre: 'Summary', filas, estilos, anchos: [30, 18, 12, 10, 10, 12, 14, 16] };
+}
+
+/** Nombre del archivo que se descarga. */
+function nombreArchivo(paquete) {
+  const base = String(paquete.archivo ?? 'schedule').replace(/\.[^.]+$/, '');
+  return `${base}_${paquete.folio}_rebalanced.xlsx`;
+}
+
+/**
+ * El .xlsx completo.
+ *
+ * @param {object} paquete  el folio tal como lo pinta la pantalla
+ * @returns {Uint8Array}
+ */
+function exportarPrograma(paquete) {
+  const aceptados = movimientosAceptados(paquete);
+  return construirXlsx([hojaSchedule(paquete, aceptados), hojaResumen(paquete, aceptados)]);
+}
+
 // ===== pantalla de análisis ===================================================
 //
 // La usan las DOS interfaces: el módulo demo y el instalado. Vivía duplicada
@@ -4164,8 +4610,30 @@ function montarAnalisis(api = {}) {
         const m = paquete.analisis.movimientos.find((x) => x.id === Number(fila.dataset.id));
         if (m) m.aceptado = aceptado;
         api.marcarMovimiento?.(Number(fila.dataset.id), aceptado);
+        revisarExportar();
       });
     }
+    revisarExportar();
+  }
+
+  /**
+   * El boton de exportar.
+   *
+   * Solo se prende cuando hay al menos un consejo aceptado: el archivo lleva
+   * los movimientos que el programador MARCO, asi que sin nada marcado saldria
+   * identico al que subio y no tendria caso mandarlo por correo.
+   */
+  function revisarExportar() {
+    const boton = $('exportar');
+    if (!boton) return;
+    const aceptados = (paquete?.analisis.movimientos ?? []).filter((m) => m.aceptado === true);
+    boton.disabled = aceptados.length === 0;
+    boton.textContent = aceptados.length
+      ? `Export to Excel (${aceptados.length} ${aceptados.length === 1 ? 'move' : 'moves'})`
+      : 'Export to Excel';
+    boton.title = aceptados.length
+      ? 'The schedule in the same format you uploaded, with the accepted moves applied'
+      : 'Mark at least one move as "Will do" first';
   }
 
   /**
@@ -4513,6 +4981,9 @@ function montarAnalisis(api = {}) {
     get paquete() {
       return paquete;
     },
+
+    /** Vuelve a evaluar si se puede exportar (tras reabrir un folio). */
+    revisarExportar,
   };
 }
 
@@ -4857,7 +5328,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * paquete y del que lo lee, asi que cambiar cualquiera de ellos invalida lo
  * guardado sin que nadie se tenga que acordar.
  */
-const VERSION_PAQUETE = "2ddc835ba18b";
+const VERSION_PAQUETE = "29a6a70712b2";
 
 let paquete = null;
 let estado = cargarEstado();
@@ -5110,6 +5581,32 @@ function cambiarVistaCorridas(cual) {
 $('hoja-corridas').addEventListener('click', (ev) => {
   const fila = ev.target.closest('tr.corrida');
   if (fila) analisis.alternarCorrida(fila.dataset.corrida);
+});
+
+// --- exportar a Excel --------------------------------------------------------
+// Aquí no hay servidor: el mismo escritor que usa el módulo instalado corre
+// en el navegador y el archivo se descarga sin que nada salga de la máquina.
+
+$('exportar').addEventListener('click', () => {
+  const p = analisis.paquete;
+  if (!p) return;
+  try {
+    const bytes = exportarPrograma(p);
+    const url = URL.createObjectURL(
+      new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo(p);
+    a.click();
+    // Sin esto el blob se queda en memoria hasta que se cierre la pestaña.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    guardarEstado();
+  } catch (e) {
+    mostrarError(`Could not build the file: ${e.message}`);
+  }
 });
 
 function mostrarError(mensaje) {

@@ -118,9 +118,11 @@ server/                   el proceso PM2
     excel.js              carga con exceljs (sólo servidor)
     servidor.js           junta el cargador con los intérpretes
   src/xlsx/lector.js      lector de .xlsx sin dependencias (para el demo)
+  src/xlsx/escritor.js    escritor de .xlsx sin dependencias (lo usan los dos)
   src/servicio/           orquestación y el paquete que consume la pantalla
     analisis.js           arma el paquete: evaluación, propuesta, productividad
     corridas.js           la hoja de corridas (reloj por línea, rollos)
+    exportar.js           el schedule reajustado, de vuelta en Excel
     avisos.js             devanador no indicado, diámetro sin receta
   src/db/                 SQL Server y el repositorio en memoria
   src/rutas/              la API
@@ -161,6 +163,42 @@ se repite es la fórmula del kg/h, porque la interfaz del módulo instalado no
 carga el motor y necesita recalcular el renglón en cada tecla — y hay una
 prueba que truena si las dos dejan de coincidir.
 
+## Exportar el schedule reajustado
+
+El análisis no sirve si se queda en la pantalla: el programador tiene que
+mandarlo por correo y que del otro lado lo lean sin explicaciones. El botón
+**Export to Excel** baja el schedule **con el mismo formato que entró** —
+mismo título, mismos nueve encabezados de SAP, mismos subtotales por work
+center — y lo único que cambia es el work center de las órdenes cuyo
+movimiento se **aceptó**.
+
+Eso permite dos cosas: el archivo se puede **volver a subir al módulo** (hay
+una prueba de ida y vuelta que lo verifica con el lector del schedule), y se
+puede pegar en SAP sin traducir nada.
+
+Se agrega, **después** de la novena columna para no correr las que ya
+existían: `Previous Work Center`, `Change` y `Reason` (`580 to 853 kg/h
+(+47%)`). Los renglones movidos van resaltados. Una segunda hoja, `Summary`,
+lleva el folio, los supuestos, lo que gana el reajuste y la lista de
+movimientos con su decisión. Un lector que sólo conozca el formato de SAP
+ignora lo de más y sigue funcionando.
+
+**Sólo se aplican los movimientos aceptados.** Un consejo que el programador
+no marcó no se toca: el archivo refleja lo que él decidió, no lo que el
+algoritmo propuso. Por eso el botón está apagado hasta que haya al menos uno
+marcado como *Will do* — si no, saldría idéntico al que subió.
+
+En el módulo instalado el archivo lo arma el servidor, porque **el estado de
+cada consejo vive en `flo_movimiento`, no en el paquete guardado**: se decide
+después de que el folio se guardó, así que leerlo del paquete daría un archivo
+sin un solo movimiento aplicado.
+
+El escritor (`src/xlsx/escritor.js`) no depende de nada, igual que el lector:
+el demo corre en el navegador sin librerías y el archivo que sale de las dos
+interfaces tiene que ser idéntico. Un `.xlsx` es un ZIP de XML; se guarda
+**sin comprimir** (método STORED), que es válido y ahorra implementar deflate.
+Un schedule de 500 renglones pesa ~230 KB así, que para adjuntar sobra.
+
 ## API
 
 | Método | Ruta | Qué hace |
@@ -174,6 +212,7 @@ prueba que truena si las dos dejan de coincidir.
 | `POST` | `/api/programas` | **sube el schedule, emite folio y devuelve el análisis** |
 | `GET` | `/api/programas/:folio` | vuelve a pintar un folio anterior |
 | `DELETE` | `/api/programas/:folio` | lo quita de la lista (lo marca `descartado`) |
+| `GET` | `/api/programas/:folio/excel` | el schedule reajustado, en formato de importación |
 | `GET` | `/api/programas/:folio/rendimiento` | matriz kg/h por diámetro y línea |
 | `POST` | `/api/programas/:folio/movimientos/:id` | el programador marca si aceptó el consejo |
 

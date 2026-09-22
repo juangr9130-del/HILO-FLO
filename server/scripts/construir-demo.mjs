@@ -34,9 +34,11 @@ const FUENTES = [
   'src/ingesta/parametros.js',
   'src/ingesta/schedule.js',
   'src/xlsx/lector.js',
+  'src/xlsx/escritor.js',
   'src/servicio/avisos.js',
   'src/servicio/corridas.js',
   'src/servicio/analisis.js',
+  'src/servicio/exportar.js',
 ];
 
 /** Quita los import/export para que los modulos vivan en un solo ambito. */

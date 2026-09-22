@@ -390,6 +390,27 @@ export class RepositorioSql {
     const fila = r.recordset[0];
     return fila ? { id: fila.orden_sugerencia, aceptado: Boolean(fila.aceptado) } : null;
   }
+
+  /**
+   * Lo que el programador decidio de cada consejo. Lo usa la exportacion.
+   *
+   * Vive en la tabla y no en el paquete guardado, porque se decide DESPUES de
+   * que el folio se guardo. Si se leyera del paquete, el archivo saldria sin
+   * un solo movimiento aplicado.
+   */
+  async leerMovimientos(folio) {
+    const r = await this.pool
+      .request()
+      .input('folio', sql.VarChar(20), folio)
+      .query(
+        `SELECT m.orden_sugerencia, m.aceptado
+           FROM flo_movimiento m
+           JOIN flo_analisis a ON a.analisis_id = m.analisis_id
+           JOIN flo_programa p ON p.programa_id = a.programa_id
+          WHERE p.folio = @folio AND m.aceptado IS NOT NULL`,
+      );
+    return new Map(r.recordset.map((f) => [f.orden_sugerencia, Boolean(f.aceptado)]));
+  }
 }
 
 /** El inverso de clavePunto, para poder ubicar el renglon en la tabla. */
