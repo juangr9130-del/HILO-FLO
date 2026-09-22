@@ -33,6 +33,15 @@ let estado = cargarEstado();
 // catalogo/velocidades-catalogo.js.
 let ajustes = new Map(Object.entries(estado.ajustes ?? {}));
 
+// Las reglas del reajuste, que el programador edita en su pantalla. Viven
+// junto a los ajustes de velocidad y sobreviven a cerrar el navegador.
+let reglas = { ...(estado.reglas ?? {}) };
+
+/** Los supuestos con que se corre, ya con lo que el programador cambio. */
+function supuestosVigentes() {
+  return reglasVigentes(reglas);
+}
+
 /** Los puntos que consume el motor, ya con los ajustes aplicados. */
 function recetasVigentes() {
   return puntosDelMotor(ajustes);
@@ -43,7 +52,7 @@ function recetasVigentes() {
 // cuota llena), y si falla el demo sigue funcionando en memoria.
 
 function cargarEstado() {
-  const vacio = { consecutivo: 0, programas: [], ajustes: {} };
+  const vacio = { consecutivo: 0, programas: [], ajustes: {}, reglas: {} };
   let guardado;
   try {
     guardado = JSON.parse(localStorage.getItem(LLAVE)) ?? vacio;
@@ -59,6 +68,7 @@ function cargarEstado() {
 
 function guardarEstado() {
   estado.ajustes = Object.fromEntries(ajustes);
+  estado.reglas = reglas;
   try {
     localStorage.setItem(LLAVE, JSON.stringify(estado));
   } catch {
@@ -99,7 +109,7 @@ $('analizar').addEventListener('click', async () => {
   try {
     const hoja = await leerHoja(await leerArchivo(archivo), HOJA_SCHEDULE);
     const programa = interpretarPrograma(hoja);
-    const supuestos = { ...SUPUESTOS };
+    const supuestos = supuestosVigentes();
     const resultado = analizar(programa, recetasVigentes(), supuestos);
 
     const nuevo = empaquetar({
@@ -191,6 +201,45 @@ const analisis = montarAnalisis({
 
 $('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
 
+// --- reglas del reajuste -----------------------------------------------------
+// La pantalla es la misma del modulo instalado (comun/pantalla-reglas.js).
+
+const pantallaReglas = montarReglas({
+  datos: async () => reglasParaPantalla(reglas),
+  guardar: async (clave, valor) => { reglas[clave] = valor; guardarEstado(); },
+  quitar: async (clave) => { delete reglas[clave]; guardarEstado(); },
+  alCambiar: () => marcarProgramaDesactualizado(),
+  hayPrograma: () => Boolean(analisis.paquete),
+
+  /**
+   * Volver a correr el mismo schedule con las reglas nuevas.
+   *
+   * No hace falta volver a subir el Excel: el folio guarda sus ordenes, asi
+   * que se rearman y se analizan otra vez. Sale un folio NUEVO y el anterior
+   * se queda: son dos analisis con reglas distintas y compararlos es justo
+   * lo que se quiere poder hacer.
+   */
+  reanalizar: async () => {
+    const previo = analisis.paquete;
+    if (!previo) return;
+    const supuestos = supuestosVigentes();
+    const programa = new Programa(previo.detalleOrdenes.map((o) => new Orden(o)));
+    const nuevo = empaquetar({
+      folio: siguienteFolio(),
+      archivo: previo.archivo,
+      cargadoPor: null,
+      supuestos,
+      ...analizar(programa, recetasVigentes(), supuestos),
+    });
+    nuevo.version = VERSION_PAQUETE;
+    estado.programas.unshift(nuevo);
+    estado.programas = estado.programas.slice(0, 5);
+    guardarEstado();
+    await mostrar(nuevo);
+    await pintarHistorial();
+  },
+});
+
 const catalogo = montarCatalogo({
   datos: async () => ({
     documento: DOCUMENTO,
@@ -219,6 +268,7 @@ const catalogo = montarCatalogo({
 
 function pintarCatalogo() {
   catalogo.refrescar();
+  pantallaReglas.refrescar();
 }
 
 /** Un folio se calculo con las velocidades de ese momento: si cambian, deja
@@ -238,7 +288,7 @@ function abrirPanel(nombre) {
   for (const b of $('tabs').querySelectorAll('button')) {
     b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
   }
-  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'velocidades']) {
+  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'reglas', 'velocidades']) {
     $(`panel-${p}`).hidden = p !== nombre;
   }
   $('carga').hidden = nombre !== 'carga';

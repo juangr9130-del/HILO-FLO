@@ -123,6 +123,7 @@ server/                   el proceso PM2
     analisis.js           arma el paquete: evaluación, propuesta, productividad
     corridas.js           la hoja de corridas (reloj por línea, rollos)
     exportar.js           el schedule reajustado, de vuelta en Excel
+    reglas.js             las reglas del reajuste, como catálogo editable
     avisos.js             devanador no indicado, diámetro sin receta
   src/db/                 SQL Server y el repositorio en memoria
   src/rutas/              la API
@@ -162,6 +163,45 @@ salen los datos (local en el demo, la API en el instalado). Lo único que sí
 se repite es la fórmula del kg/h, porque la interfaz del módulo instalado no
 carga el motor y necesita recalcular el renglón en cada tecla — y hay una
 prueba que truena si las dos dejan de coincidir.
+
+## Las reglas viven dentro del programa
+
+Las velocidades ya se editaban desde la pantalla; las reglas del reajuste
+estaban clavadas en el código, y cada vez que Florence quería probar otro
+valor había que recompilar. Ahora son un **catálogo editable** igual que las
+velocidades:
+
+| regla | qué decide |
+|---|---|
+| objetivo | rendimiento (misma tonelada en menos horas) o calendario (cerrar antes) |
+| tope de cambio por línea | cuántos rollos se puede apartar una línea de lo programado |
+| horas disponibles por línea | el horizonte |
+| cambio de medida | minutos que cuesta cambiar de diámetro |
+| eficiencia operativa | apagada a propósito hasta que haya un OEE medido |
+| ITW-15 instalada | para ver cómo quedaría el programa con ella corriendo |
+
+Cada regla lleva **su explicación en la pantalla**, porque quien la mueve no
+es quien la escribió: si no dice qué compra y qué cuesta, se mueve a ciegas.
+La que se apartó del valor de fábrica queda marcada y se puede regresar con
+un clic.
+
+Sólo se guarda **lo que se aparta** del valor de fábrica (`flo_regla` en la
+base, `localStorage` en el demo), así que una tabla vacía significa "todo por
+omisión". Un valor guardado que ya no pasa la validación —de una versión
+anterior con otro rango, o de una edición a mano— **se ignora en vez de tumbar
+el análisis**.
+
+Cambiar una regla **no reanaliza solo**: el folio en pantalla se calculó con
+las reglas de ese momento y tiene que seguir cuadrando. Se marca como
+desactualizado y el botón **Re-analyze with these rules** vuelve a correr *el
+mismo schedule* —no hace falta subir el Excel otra vez, el folio guarda sus
+órdenes— y saca un **folio nuevo**. El anterior se queda: son dos análisis con
+reglas distintas y compararlos es justo lo que se quiere poder hacer.
+
+La validación vive en `src/servicio/reglas.js` y manda. La pantalla valida
+también, pero **con los metadatos que la propia regla trae** (tipo, rango,
+opciones), no con una copia: así el módulo instalado no necesita el catálogo
+del servidor en el navegador y no hay dos definiciones que desincronizar.
 
 ## Exportar el schedule reajustado
 
@@ -212,6 +252,10 @@ Un schedule de 500 renglones pesa ~230 KB así, que para adjuntar sobra.
 | `POST` | `/api/programas` | **sube el schedule, emite folio y devuelve el análisis** |
 | `GET` | `/api/programas/:folio` | vuelve a pintar un folio anterior |
 | `DELETE` | `/api/programas/:folio` | lo quita de la lista (lo marca `descartado`) |
+| `GET` | `/api/reglas` | las reglas del reajuste, con su valor y su explicación |
+| `PUT` | `/api/reglas/:clave` | cambia una regla |
+| `DELETE` | `/api/reglas/:clave` | la regresa a su valor de fábrica |
+| `POST` | `/api/programas/:folio/reanalizar` | vuelve a correr ese folio con las reglas de hoy |
 | `GET` | `/api/programas/:folio/excel` | el schedule reajustado, en formato de importación |
 | `GET` | `/api/programas/:folio/rendimiento` | matriz kg/h por diámetro y línea |
 | `POST` | `/api/programas/:folio/movimientos/:id` | el programador marca si aceptó el consejo |

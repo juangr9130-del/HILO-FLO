@@ -50,6 +50,15 @@ export const SUPUESTOS = {
    * defender -- en vez de limitar el resultado.
    */
   topeOrdenes: 5,
+
+  /**
+   * ITW-15 todavia no esta instalada, asi que queda fuera del reparto.
+   *
+   * Se usaba desde catalogoLineas() pero no estaba declarado aqui, asi que la
+   * pantalla de reglas no tenia valor de fabrica que ensenar. Lo cacho su
+   * prueba: toda regla editable tiene que ser un supuesto.
+   */
+  itw15Activa: false,
 };
 
 export function catalogoLineas({

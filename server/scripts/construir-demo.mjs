@@ -39,6 +39,7 @@ const FUENTES = [
   'src/servicio/corridas.js',
   'src/servicio/analisis.js',
   'src/servicio/exportar.js',
+  'src/servicio/reglas.js',
 ];
 
 /** Quita los import/export para que los modulos vivan en un solo ambito. */
@@ -157,7 +158,7 @@ for (const ruta of FUENTES) {
 const estilos = await readFile(join(WEB, 'estilos.css'), 'utf8');
 const plantilla = await readFile(join(WEB, 'demo', 'plantilla.html'), 'utf8');
 const comun = await Promise.all(
-  ['pantalla-analisis.js', 'pantalla-catalogo.js', 'pantalla-historial.js'].map((f) => readFile(join(WEB, 'comun', f), 'utf8')),
+  ['pantalla-analisis.js', 'pantalla-catalogo.js', 'pantalla-historial.js', 'pantalla-reglas.js'].map((f) => readFile(join(WEB, 'comun', f), 'utf8')),
 );
 const interfaz = [...comun, await readFile(join(WEB, 'demo', 'interfaz.js'), 'utf8')].join('\n\n');
 

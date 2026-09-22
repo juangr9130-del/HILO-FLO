@@ -22,6 +22,7 @@ async function arrancar() {
       ? 'demo mode'
       : (estado.usuario?.nombre ?? estado.usuario?.numeroEmpleado ?? '');
     await catalogo.refrescar();
+    await reglas.refrescar();
     await pintarEstadoRecetas();
     await pintarHistorial();
     actualizarTabs();
@@ -74,6 +75,26 @@ const catalogo = montarCatalogo({
 });
 
 $('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
+
+// Las reglas del reajuste: la misma pantalla del demo, conectada a la API.
+const reglas = montarReglas({
+  datos: () => fetch('/api/reglas').then((r) => r.json()),
+  guardar: (clave, valor) =>
+    fetch(`/api/reglas/${encodeURIComponent(clave)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valor }),
+    }),
+  quitar: (clave) => fetch(`/api/reglas/${encodeURIComponent(clave)}`, { method: 'DELETE' }),
+  alCambiar: () => marcarProgramaDesactualizado(),
+  hayPrograma: () => Boolean(paquete),
+  reanalizar: async () => {
+    const r = await fetch(`/api/programas/${paquete.folio}/reanalizar`, { method: 'POST' });
+    if (!r.ok) return mostrarError((await r.json()).error);
+    await mostrar(await r.json());
+    await pintarHistorial();
+  },
+});
 
 /** Un folio se calculo con las velocidades de ese momento: si cambian, deja
  *  de reflejar la realidad y hay que volver a analizar. */
@@ -182,7 +203,7 @@ function abrirPanel(nombre) {
   for (const b of $('tabs').querySelectorAll('button')) {
     b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
   }
-  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'velocidades']) {
+  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'reglas', 'velocidades']) {
     $(`panel-${p}`).hidden = p !== nombre;
   }
   $('carga').hidden = nombre !== 'carga';

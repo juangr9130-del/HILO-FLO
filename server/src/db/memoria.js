@@ -24,6 +24,26 @@ export class RepositorioMemoria {
     return this.ajustes;
   }
 
+  // --- reglas del reajuste ---
+  // Solo se guarda lo que se aparta del valor de fabrica: un objeto vacio
+  // significa "todo por omision".
+
+  async leerReglas() {
+    return { ...(this.reglas ?? {}) };
+  }
+
+  async guardarRegla(clave, valor) {
+    this.reglas = { ...(this.reglas ?? {}), [clave]: valor };
+    return { clave, valor };
+  }
+
+  async quitarRegla(clave) {
+    if (!this.reglas || !(clave in this.reglas)) return null;
+    const { [clave]: fuera, ...resto } = this.reglas;
+    this.reglas = resto;
+    return { clave };
+  }
+
   async guardarAjuste(clave, mmS) {
     this.ajustes.set(clave, mmS);
     return { clave, mmS };

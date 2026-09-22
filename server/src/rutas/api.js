@@ -7,6 +7,7 @@ import { config, hayBaseDeDatos } from '../config.js';
 import { exigirAcceso, exigirEscritura, hayAutenticacion } from '../auth.js';
 import { analizar, empaquetar, matrizRendimiento } from '../servicio/analisis.js';
 import { ErrorDeDatos } from '../errores.js';
+import { reglasParaPantalla, reglasVigentes, revisarRegla } from '../servicio/reglas.js';
 import { leerPrograma } from '../ingesta/servidor.js';
 import {
   DOCUMENTO,
@@ -99,6 +100,41 @@ export function crearApi(repo) {
     }
   });
 
+  /* ---------- Reglas del reajuste ---------- */
+
+  // Viven en la base, no en el codigo: el programador las cambia desde su
+  // pantalla y el siguiente analisis las usa.
+
+  api.get('/reglas', async (req, res, siguiente) => {
+    try {
+      res.json(reglasParaPantalla(await repo.leerReglas()));
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
+  api.put('/reglas/:clave', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      const { clave } = req.params;
+      const valor = req.body?.valor;
+      const motivo = revisarRegla(clave, valor);
+      if (motivo) return res.status(400).json({ error: `Not saved: ${motivo}.` });
+      res.json(await repo.guardarRegla(clave, valor, req.usuario?.numeroEmpleado ?? null));
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
+  api.delete('/reglas/:clave', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      const quitada = await repo.quitarRegla(req.params.clave);
+      if (!quitada) return res.status(404).json({ error: 'That rule is already at its default.' });
+      res.json(quitada);
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
   /* ---------- Programas ---------- */
 
   api.get('/programas', async (req, res, siguiente) => {
@@ -115,12 +151,13 @@ export function crearApi(repo) {
 
       const puntos = puntosDelMotor(await repo.leerAjustes());
 
-      const supuestos = {
-        horasDisponibles: Number(req.body.horas ?? config.horasDisponibles),
-        eficiencia: Number(req.body.eficiencia ?? config.eficiencia),
-        minutosCambio: Number(req.body.minutosCambio ?? config.minutosCambio),
-        itw15Activa: req.body.itw15 === 'true',
-      };
+      // Las reglas que el programador dejo guardadas mandan sobre la
+      // configuracion del proceso; el cuerpo de la peticion solo sobre ellas.
+      const supuestos = reglasVigentes(await repo.leerReglas());
+      if (req.body.horas) supuestos.horasDisponibles = Number(req.body.horas);
+      if (req.body.eficiencia) supuestos.eficiencia = Number(req.body.eficiencia);
+      if (req.body.minutosCambio) supuestos.minutosCambio = Number(req.body.minutosCambio);
+      if (req.body.itw15) supuestos.itw15Activa = req.body.itw15 === 'true';
 
       const programa = await leerPrograma(req.file.buffer);
       const resultado = analizar(programa, puntos, supuestos);
@@ -171,6 +208,36 @@ export function crearApi(repo) {
       );
       if (!m) return res.status(404).json({ error: 'That move does not exist.' });
       res.json(m);
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
+  /**
+   * Volver a correr un folio con las reglas de hoy.
+   *
+   * Sale un folio NUEVO y el anterior se queda: son dos analisis con reglas
+   * distintas, y poder compararlos es justo lo que se quiere. No hace falta
+   * volver a subir el Excel porque el folio guarda sus ordenes.
+   */
+  api.post('/programas/:folio/reanalizar', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      const previo = await repo.leerPrograma(req.params.folio);
+      if (!previo) return res.status(404).json({ error: `Ticket ${req.params.folio} does not exist.` });
+
+      const { Programa, Orden } = await import('../motor/modelos.js');
+      const supuestos = reglasVigentes(await repo.leerReglas());
+      const programa = new Programa(previo.detalleOrdenes.map((o) => new Orden(o)));
+      const paquete = empaquetar({
+        folio: await repo.siguienteFolio(),
+        archivo: previo.archivo,
+        cargadoPor: req.usuario?.numeroEmpleado ?? null,
+        supuestos,
+        ...analizar(programa, puntosDelMotor(await repo.leerAjustes()), supuestos),
+      });
+
+      await repo.guardarPrograma(paquete);
+      res.status(201).json(paquete);
     } catch (e) {
       siguiente(e);
     }

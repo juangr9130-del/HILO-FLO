@@ -391,6 +391,45 @@ export class RepositorioSql {
     return fila ? { id: fila.orden_sugerencia, aceptado: Boolean(fila.aceptado) } : null;
   }
 
+  // --- reglas del reajuste ---
+  // Se guardan como texto y el servicio las interpreta, para que agregar una
+  // regla de otro tipo no pida migrar la tabla.
+
+  async leerReglas() {
+    const r = await this.pool.request().query('SELECT clave, valor FROM flo_regla');
+    const reglas = {};
+    for (const f of r.recordset) {
+      // 'true'/'false' y los numeros vuelven a su tipo; lo demas es texto.
+      if (f.valor === 'true' || f.valor === 'false') reglas[f.clave] = f.valor === 'true';
+      else if (f.valor !== '' && Number.isFinite(Number(f.valor))) reglas[f.clave] = Number(f.valor);
+      else reglas[f.clave] = f.valor;
+    }
+    return reglas;
+  }
+
+  async guardarRegla(clave, valor, empleado = null) {
+    await this.pool
+      .request()
+      .input('clave', sql.NVarChar(40), clave)
+      .input('valor', sql.NVarChar(100), String(valor))
+      .input('por', sql.NVarChar(20), empleado)
+      .query(
+        `MERGE flo_regla AS d
+         USING (SELECT @clave AS clave) AS o ON d.clave = o.clave
+         WHEN MATCHED THEN UPDATE SET valor = @valor, cambiada_en = SYSUTCDATETIME(), cambiada_por = @por
+         WHEN NOT MATCHED THEN INSERT (clave, valor, cambiada_por) VALUES (@clave, @valor, @por);`,
+      );
+    return { clave, valor };
+  }
+
+  async quitarRegla(clave) {
+    const r = await this.pool
+      .request()
+      .input('clave', sql.NVarChar(40), clave)
+      .query('DELETE FROM flo_regla OUTPUT DELETED.clave WHERE clave = @clave');
+    return r.recordset[0] ? { clave } : null;
+  }
+
   /**
    * Lo que el programador decidio de cada consejo. Lo usa la exportacion.
    *

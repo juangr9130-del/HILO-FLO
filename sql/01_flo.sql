@@ -143,6 +143,19 @@ GO
 /* Cada carga del production schedule. El FOLIO es lo que el programador ve y
    cita ("el analisis del folio FLO-2026-0007"): un programa subido nunca se
    sobreescribe, se sube uno nuevo. */
+/* ---------- Reglas del reajuste ----------
+   Viven en la base y no en el codigo: el programador las cambia desde la
+   pantalla. Solo se guarda lo que se aparta del valor de fabrica, asi que
+   una tabla vacia significa "todo por omision". */
+CREATE TABLE flo_regla (
+    clave            NVARCHAR(40)  NOT NULL PRIMARY KEY,
+    valor            NVARCHAR(100) NOT NULL,  -- se guarda como texto y el servicio lo interpreta
+    cambiada_en      DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
+    cambiada_por     NVARCHAR(20)  NULL,
+    CONSTRAINT FK_flo_regla_usuario FOREIGN KEY (cambiada_por) REFERENCES cat_empleados(numero_empleado)
+);
+GO
+
 CREATE TABLE flo_programa (
     programa_id         INT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
     folio               VARCHAR(20)   NOT NULL,   -- 'FLO-2026-0007'

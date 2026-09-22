@@ -493,6 +493,45 @@ table.rollos td.notas {
   font-size: 11px;
 }
 
+/* ---------- Reglas del reajuste ---------- */
+
+.regla {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 14px 18px;
+  margin-bottom: 12px;
+}
+/* La que se apartó del valor de fábrica se marca: quien abre la pantalla
+   tiene que ver de un vistazo qué se tocó. */
+.regla.cambiada { border-left: 4px solid var(--naranja); }
+
+.regla .mando { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.regla label { font-weight: 600; color: var(--azul); min-width: 230px; }
+.regla .unidad { font-size: 13px; color: var(--texto-tenue); }
+
+.regla input[type='number'],
+.regla select {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--texto);
+}
+.regla input[type='number'] { width: 110px; font-family: 'Barlow Condensed', sans-serif; font-size: 17px; }
+.regla select { min-width: 330px; }
+
+.regla .interruptor { display: inline-flex; align-items: center; gap: 7px; font-weight: 400; min-width: 0; }
+.regla .interruptor input { width: 17px; height: 17px; }
+
+.regla .ayuda { margin: 8px 0 0; font-size: 13px; color: var(--texto-tenue); line-height: 1.5; }
+.regla .error { margin: 6px 0 0; font-size: 13px; color: var(--rojo); }
+
+#pie-reglas { margin-top: 16px; }
+#pie-reglas .rotulo { font-size: 13px; color: var(--texto-tenue); }
+
 
 /* Sólo del demo: el banner que aclara que esto no es el módulo instalado. */
 .banner-demo {
@@ -526,6 +565,7 @@ table.rollos td.notas {
   <button data-panel="corridas" aria-selected="false" data-requiere-programa>Run sheet</button>
   <button data-panel="analisis" aria-selected="false" data-requiere-programa>Analysis</button>
   <button data-panel="rendimiento" aria-selected="false" data-requiere-programa>Throughput kg/h</button>
+  <button data-panel="reglas" aria-selected="false">Rules</button>
   <button data-panel="velocidades" aria-selected="false">Line speeds</button>
 </nav>
 
@@ -626,6 +666,16 @@ table.rollos td.notas {
       </div>
       <p class="nota-tabla" id="nota-ritmo"></p>
     </div>
+  </section>
+
+  <!-- ---------- Rules ---------- -->
+  <section id="panel-reglas" hidden>
+    <div class="aviso info">
+      These are the rules the rebalance follows. Change any of them and re-analyze:
+      nothing is fixed in the code.
+    </div>
+    <div id="reglas"></div>
+    <div id="pie-reglas"></div>
   </section>
 
   <section id="panel-velocidades" hidden>
@@ -3567,6 +3617,15 @@ const SUPUESTOS = {
    * defender -- en vez de limitar el resultado.
    */
   topeOrdenes: 5,
+
+  /**
+   * ITW-15 todavia no esta instalada, asi que queda fuera del reparto.
+   *
+   * Se usaba desde catalogoLineas() pero no estaba declarado aqui, asi que la
+   * pantalla de reglas no tenia valor de fabrica que ensenar. Lo cacho su
+   * prueba: toda regla editable tiene que ser un supuesto.
+   */
+  itw15Activa: false,
 };
 
 function catalogoLineas({
@@ -4079,6 +4138,150 @@ function nombreArchivo(paquete) {
 function exportarPrograma(paquete) {
   const aceptados = movimientosAceptados(paquete);
   return construirXlsx([hojaSchedule(paquete, aceptados), hojaResumen(paquete, aceptados)]);
+}
+
+// ===== src/servicio/reglas.js ========================================
+
+/**
+ * Las reglas del reajuste, como catalogo editable.
+ *
+ * Igual que las velocidades: viven DENTRO del programa y el programador las
+ * cambia desde la pantalla, sin que nadie toque codigo. Antes estaban
+ * clavadas en SUPUESTOS y cada vez que Florence queria probar otro valor
+ * habia que recompilar.
+ *
+ * Cada regla trae su explicacion porque el que la mueve no es quien la
+ * escribio: si no dice que compra y que cuesta, se mueve a ciegas.
+ */
+
+
+/** @type {{clave: string, etiqueta: string, ayuda: string, tipo: string}[]} */
+const REGLAS = [
+  {
+    clave: 'objetivo',
+    etiqueta: 'What the rebalance optimizes',
+    tipo: 'opcion',
+    opciones: [
+      { valor: 'rendimiento', etiqueta: 'Throughput — same tons in fewer line hours' },
+      { valor: 'calendario', etiqueta: 'Calendar — finish the program earlier' },
+    ],
+    ayuda:
+      'Throughput never moves a coil to a line that runs it slower, but the program ' +
+      'does not finish earlier. Calendar evens out the lines so the program closes ' +
+      'sooner, and to do that it sometimes runs material slower. You cannot have both.',
+  },
+  {
+    clave: 'topeOrdenes',
+    etiqueta: 'Most a line may change',
+    unidad: 'coils',
+    tipo: 'numero',
+    min: 1,
+    max: 200,
+    entero: true,
+    ayuda:
+      'How far a line may drift from what you scheduled. Lower means fewer coils to ' +
+      'review and an easier change to defend; higher finds more. Without it the ' +
+      'search empties the slow lines. Only applies to the throughput objective.',
+  },
+  {
+    clave: 'horasDisponibles',
+    etiqueta: 'Hours available per line',
+    unidad: 'h',
+    tipo: 'numero',
+    min: 1,
+    max: 336,
+    ayuda:
+      'The horizon: past this, a line stops producing. 144 h is 6 days × 24 h and is ' +
+      'a placeholder — nobody has measured it per line yet, so treat it with care.',
+  },
+  {
+    clave: 'minutosCambio',
+    etiqueta: 'Size changeover',
+    unidad: 'min',
+    tipo: 'numero',
+    min: 0,
+    max: 480,
+    ayuda:
+      'Charged whenever the diameter changes between two consecutive orders on a line. ' +
+      'The result barely moves between 0 and 90 min, so this is not a sensitive number.',
+  },
+  {
+    clave: 'eficiencia',
+    etiqueta: 'Operating efficiency',
+    tipo: 'numero',
+    min: 0.1,
+    max: 1,
+    paso: 0.01,
+    ayuda:
+      'Turned off (1.00) on purpose: for now the analysis runs against recipe speed as ' +
+      'it is. Lower it once there is a measured OEE and every kg/h drops accordingly.',
+  },
+  {
+    clave: 'itw15Activa',
+    etiqueta: 'ITW-15 is installed',
+    tipo: 'bandera',
+    ayuda:
+      'ITW-15 is not installed yet, so it is excluded. Turn it on to see what the ' +
+      'program would look like with it running.',
+  },
+];
+
+const PORCLAVE = new Map(REGLAS.map((r) => [r.clave, r]));
+
+/**
+ * Motivo por el que un valor no se acepta, o null si esta bien.
+ *
+ * Se revisa en los dos lados: la pantalla para avisar mientras se escribe, y
+ * el servicio antes de guardar. Una pantalla no es una validacion.
+ */
+function revisarRegla(clave, valor) {
+  const r = PORCLAVE.get(clave);
+  if (!r) return 'that rule does not exist';
+
+  if (r.tipo === 'opcion') {
+    return r.opciones.some((o) => o.valor === valor) ? null : 'that is not one of the options';
+  }
+  if (r.tipo === 'bandera') {
+    return typeof valor === 'boolean' ? null : 'that has to be yes or no';
+  }
+
+  const v = Number(valor);
+  if (!Number.isFinite(v)) return 'that has to be a number';
+  if (r.entero && !Number.isInteger(v)) return 'that has to be a whole number';
+  if (v < r.min || v > r.max) return `that is out of range (${r.min} to ${r.max})`;
+  return null;
+}
+
+/**
+ * Los supuestos con que se corre, ya con lo que el programador cambio.
+ *
+ * Un valor guardado que ya no pasa la revision se IGNORA en vez de tumbar el
+ * analisis: puede venir de una version anterior con otro rango.
+ */
+function reglasVigentes(guardadas = {}) {
+  const vigentes = { ...SUPUESTOS };
+  for (const [clave, valor] of Object.entries(guardadas ?? {})) {
+    if (!PORCLAVE.has(clave)) continue;
+    if (revisarRegla(clave, valor)) continue;
+    vigentes[clave] = PORCLAVE.get(clave).tipo === 'numero' ? Number(valor) : valor;
+  }
+  return vigentes;
+}
+
+/** Lo que pinta la pantalla: cada regla con su valor y si esta cambiada. */
+function reglasParaPantalla(guardadas = {}) {
+  const vigentes = reglasVigentes(guardadas);
+  return REGLAS.map((r) => ({
+    ...r,
+    valor: vigentes[r.clave] ?? SUPUESTOS[r.clave],
+    predeterminado: SUPUESTOS[r.clave],
+    cambiada: vigentes[r.clave] !== SUPUESTOS[r.clave],
+  }));
+}
+
+/** Cuantas reglas se apartaron del valor de fabrica. */
+function resumenReglas(guardadas = {}) {
+  return reglasParaPantalla(guardadas).filter((r) => r.cambiada).length;
 }
 
 // ===== pantalla de análisis ===================================================
@@ -5303,6 +5506,175 @@ function montarHistorial(api) {
 }
 
 
+// ===== pantalla de reglas =====================================================
+//
+// Las reglas del reajuste, editables desde el programa. La usan las DOS
+// interfaces; cada una inyecta de dónde salen los valores y a dónde van los
+// cambios, igual que la pantalla de velocidades.
+//
+// Cambiar una regla NO reanaliza solo: el folio que se está viendo se calculó
+// con las reglas de ese momento y tiene que seguir cuadrando. Se marca como
+// desactualizado y el programador decide cuándo volver a correr.
+
+function montarReglas(api = {}) {
+  const $ = (id) => document.getElementById(id);
+  const num = (v, d = 0) =>
+    (v ?? 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  let reglas = [];
+  let sucio = false;
+
+  async function refrescar() {
+    reglas = await api.datos();
+    pintar();
+  }
+
+  function pintar() {
+    const caja = $('reglas');
+    if (!caja) return;
+    caja.innerHTML = reglas.map(campo).join('');
+
+    for (const e of caja.querySelectorAll('[data-regla]')) {
+      e.addEventListener('change', () => cambiar(e));
+    }
+    caja.querySelectorAll('button[data-restablecer]').forEach((b) => {
+      b.addEventListener('click', () => restablecer(b.dataset.restablecer));
+    });
+    pintarPie();
+  }
+
+  function campo(r) {
+    const cambiada = r.cambiada
+      ? `<button class="borrar" data-restablecer="${r.clave}" title="Back to ${valorLegible(r, r.predeterminado)}">Reset</button>`
+      : '';
+    return `<div class="regla${r.cambiada ? ' cambiada' : ''}">
+      <div class="mando">
+        <label for="regla-${r.clave}">${r.etiqueta}</label>
+        ${control(r)}
+        ${r.unidad ? `<span class="unidad">${r.unidad}</span>` : ''}
+        ${cambiada}
+      </div>
+      <p class="ayuda">${r.ayuda}</p>
+      <p class="error" id="error-${r.clave}" hidden></p>
+    </div>`;
+  }
+
+  function control(r) {
+    const id = `regla-${r.clave}`;
+    if (r.tipo === 'opcion') {
+      return `<select id="${id}" data-regla="${r.clave}">
+        ${r.opciones.map((o) => `<option value="${o.valor}"${o.valor === r.valor ? ' selected' : ''}>${o.etiqueta}</option>`).join('')}
+      </select>`;
+    }
+    if (r.tipo === 'bandera') {
+      return `<label class="interruptor"><input type="checkbox" id="${id}" data-regla="${r.clave}"${r.valor ? ' checked' : ''}> <span>${r.valor ? 'Yes' : 'No'}</span></label>`;
+    }
+    return `<input type="number" id="${id}" data-regla="${r.clave}" value="${r.valor}"
+              min="${r.min}" max="${r.max}" step="${r.paso ?? (r.entero ? 1 : 'any')}">`;
+  }
+
+  function valorLegible(r, v) {
+    if (r.tipo === 'bandera') return v ? 'Yes' : 'No';
+    if (r.tipo === 'opcion') return r.opciones.find((o) => o.valor === v)?.etiqueta ?? v;
+    return `${num(v, Number.isInteger(v) ? 0 : 2)}${r.unidad ? ` ${r.unidad}` : ''}`;
+  }
+
+  async function cambiar(elemento) {
+    const clave = elemento.dataset.regla;
+    const r = reglas.find((x) => x.clave === clave);
+    const valor =
+      r.tipo === 'bandera'
+        ? elemento.checked
+        : r.tipo === 'opcion'
+          ? elemento.value
+          : Number(elemento.value);
+
+    const error = $(`error-${clave}`);
+    const motivo = revisar(r, valor);
+    if (motivo) {
+      // No se guarda y el valor se queda a la vista para corregirlo: borrarlo
+      // obligaría a volver a escribirlo entero.
+      error.textContent = `Not saved: ${motivo}.`;
+      error.hidden = false;
+      return;
+    }
+    error.hidden = true;
+
+    // El servidor vuelve a validar por su cuenta. Si rechaza algo que aquí
+    // pasó, se dice: quedarse callado dejaría la pantalla mostrando un valor
+    // que no se guardó.
+    const r2 = await api.guardar(clave, valor);
+    if (r2 && r2.ok === false) {
+      error.textContent = (await r2.json().catch(() => ({}))).error ?? 'The rule was not saved.';
+      error.hidden = false;
+    }
+    sucio = true;
+    await refrescar();
+    api.alCambiar?.();
+  }
+
+  /**
+   * Motivo por el que un valor no se acepta, o null.
+   *
+   * Sale de los metadatos que la regla ya trae (tipo, rango, opciones), no de
+   * una copia de las reglas: así el módulo instalado no necesita el catálogo
+   * del servidor en el navegador y no hay dos definiciones que desincronizar.
+   * La validación que manda sigue siendo la del servicio.
+   */
+  function revisar(r, valor) {
+    if (r.tipo === 'opcion') {
+      return r.opciones.some((o) => o.valor === valor) ? null : 'that is not one of the options';
+    }
+    if (r.tipo === 'bandera') return typeof valor === 'boolean' ? null : 'that has to be yes or no';
+    if (!Number.isFinite(valor)) return 'that has to be a number';
+    if (r.entero && !Number.isInteger(valor)) return 'that has to be a whole number';
+    if (valor < r.min || valor > r.max) return `that is out of range (${r.min} to ${r.max})`;
+    return null;
+  }
+
+  async function restablecer(clave) {
+    await api.quitar(clave);
+    sucio = true;
+    await refrescar();
+    api.alCambiar?.();
+  }
+
+  function pintarPie() {
+    const pie = $('pie-reglas');
+    if (!pie) return;
+    const cambiadas = reglas.filter((r) => r.cambiada).length;
+    const boton = api.reanalizar
+      ? `<button class="primario" id="reanalizar"${api.hayPrograma?.() ? '' : ' disabled'}>Re-analyze with these rules</button>`
+      : '';
+    pie.innerHTML = `
+      <div class="controles">
+        <span class="rotulo">${
+          cambiadas
+            ? `${cambiadas} ${cambiadas === 1 ? 'rule differs' : 'rules differ'} from the defaults.`
+            : 'All rules are at their default.'
+        }${sucio ? ' The ticket on screen was calculated with the previous ones.' : ''}</span>
+        <span class="relleno"></span>
+        ${boton}
+      </div>`;
+    const b = $('reanalizar');
+    if (b) {
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        b.textContent = 'Re-analyzing…';
+        try {
+          await api.reanalizar();
+          sucio = false;
+        } finally {
+          pintarPie();
+        }
+      });
+    }
+  }
+
+  return { refrescar, marcarLimpio: () => { sucio = false; pintarPie(); } };
+}
+
+
 // ===== interfaz del demo ======================================================
 //
 // Lo mismo que hace web/app.js, pero sin servidor: el analisis corre aqui
@@ -5329,7 +5701,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * paquete y del que lo lee, asi que cambiar cualquiera de ellos invalida lo
  * guardado sin que nadie se tenga que acordar.
  */
-const VERSION_PAQUETE = "29a6a70712b2";
+const VERSION_PAQUETE = "e9ab6f440543";
 
 let paquete = null;
 let estado = cargarEstado();
@@ -5337,6 +5709,15 @@ let estado = cargarEstado();
 // Los ajustes de velocidad viven encima de la semilla del WI. Ver
 // catalogo/velocidades-catalogo.js.
 let ajustes = new Map(Object.entries(estado.ajustes ?? {}));
+
+// Las reglas del reajuste, que el programador edita en su pantalla. Viven
+// junto a los ajustes de velocidad y sobreviven a cerrar el navegador.
+let reglas = { ...(estado.reglas ?? {}) };
+
+/** Los supuestos con que se corre, ya con lo que el programador cambio. */
+function supuestosVigentes() {
+  return reglasVigentes(reglas);
+}
 
 /** Los puntos que consume el motor, ya con los ajustes aplicados. */
 function recetasVigentes() {
@@ -5348,7 +5729,7 @@ function recetasVigentes() {
 // cuota llena), y si falla el demo sigue funcionando en memoria.
 
 function cargarEstado() {
-  const vacio = { consecutivo: 0, programas: [], ajustes: {} };
+  const vacio = { consecutivo: 0, programas: [], ajustes: {}, reglas: {} };
   let guardado;
   try {
     guardado = JSON.parse(localStorage.getItem(LLAVE)) ?? vacio;
@@ -5364,6 +5745,7 @@ function cargarEstado() {
 
 function guardarEstado() {
   estado.ajustes = Object.fromEntries(ajustes);
+  estado.reglas = reglas;
   try {
     localStorage.setItem(LLAVE, JSON.stringify(estado));
   } catch {
@@ -5404,7 +5786,7 @@ $('analizar').addEventListener('click', async () => {
   try {
     const hoja = await leerHoja(await leerArchivo(archivo), HOJA_SCHEDULE);
     const programa = interpretarPrograma(hoja);
-    const supuestos = { ...SUPUESTOS };
+    const supuestos = supuestosVigentes();
     const resultado = analizar(programa, recetasVigentes(), supuestos);
 
     const nuevo = empaquetar({
@@ -5496,6 +5878,45 @@ const analisis = montarAnalisis({
 
 $('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
 
+// --- reglas del reajuste -----------------------------------------------------
+// La pantalla es la misma del modulo instalado (comun/pantalla-reglas.js).
+
+const pantallaReglas = montarReglas({
+  datos: async () => reglasParaPantalla(reglas),
+  guardar: async (clave, valor) => { reglas[clave] = valor; guardarEstado(); },
+  quitar: async (clave) => { delete reglas[clave]; guardarEstado(); },
+  alCambiar: () => marcarProgramaDesactualizado(),
+  hayPrograma: () => Boolean(analisis.paquete),
+
+  /**
+   * Volver a correr el mismo schedule con las reglas nuevas.
+   *
+   * No hace falta volver a subir el Excel: el folio guarda sus ordenes, asi
+   * que se rearman y se analizan otra vez. Sale un folio NUEVO y el anterior
+   * se queda: son dos analisis con reglas distintas y compararlos es justo
+   * lo que se quiere poder hacer.
+   */
+  reanalizar: async () => {
+    const previo = analisis.paquete;
+    if (!previo) return;
+    const supuestos = supuestosVigentes();
+    const programa = new Programa(previo.detalleOrdenes.map((o) => new Orden(o)));
+    const nuevo = empaquetar({
+      folio: siguienteFolio(),
+      archivo: previo.archivo,
+      cargadoPor: null,
+      supuestos,
+      ...analizar(programa, recetasVigentes(), supuestos),
+    });
+    nuevo.version = VERSION_PAQUETE;
+    estado.programas.unshift(nuevo);
+    estado.programas = estado.programas.slice(0, 5);
+    guardarEstado();
+    await mostrar(nuevo);
+    await pintarHistorial();
+  },
+});
+
 const catalogo = montarCatalogo({
   datos: async () => ({
     documento: DOCUMENTO,
@@ -5524,6 +5945,7 @@ const catalogo = montarCatalogo({
 
 function pintarCatalogo() {
   catalogo.refrescar();
+  pantallaReglas.refrescar();
 }
 
 /** Un folio se calculo con las velocidades de ese momento: si cambian, deja
@@ -5543,7 +5965,7 @@ function abrirPanel(nombre) {
   for (const b of $('tabs').querySelectorAll('button')) {
     b.setAttribute('aria-selected', String(b.dataset.panel === nombre));
   }
-  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'velocidades']) {
+  for (const p of ['programacion', 'corridas', 'analisis', 'rendimiento', 'reglas', 'velocidades']) {
     $(`panel-${p}`).hidden = p !== nombre;
   }
   $('carga').hidden = nombre !== 'carga';

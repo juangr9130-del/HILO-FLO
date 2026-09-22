@@ -58,6 +58,7 @@
   <button data-panel="corridas" aria-selected="false" data-requiere-programa>Run sheet</button>
   <button data-panel="analisis" aria-selected="false" data-requiere-programa>Analysis</button>
   <button data-panel="rendimiento" aria-selected="false" data-requiere-programa>Throughput kg/h</button>
+  <button data-panel="reglas" aria-selected="false">Rules</button>
   <button data-panel="velocidades" aria-selected="false">Line speeds</button>
 </nav>
 
@@ -158,6 +159,16 @@
       </div>
       <p class="nota-tabla" id="nota-ritmo"></p>
     </div>
+  </section>
+
+  <!-- ---------- Rules ---------- -->
+  <section id="panel-reglas" hidden>
+    <div class="aviso info">
+      These are the rules the rebalance follows. Change any of them and re-analyze:
+      nothing is fixed in the code.
+    </div>
+    <div id="reglas"></div>
+    <div id="pie-reglas"></div>
   </section>
 
   <section id="panel-velocidades" hidden>

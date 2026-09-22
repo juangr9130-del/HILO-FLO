@@ -466,3 +466,42 @@ table.rollos td.notas {
   max-width: 340px;
   font-size: 11px;
 }
+
+/* ---------- Reglas del reajuste ---------- */
+
+.regla {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 14px 18px;
+  margin-bottom: 12px;
+}
+/* La que se apartó del valor de fábrica se marca: quien abre la pantalla
+   tiene que ver de un vistazo qué se tocó. */
+.regla.cambiada { border-left: 4px solid var(--naranja); }
+
+.regla .mando { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.regla label { font-weight: 600; color: var(--azul); min-width: 230px; }
+.regla .unidad { font-size: 13px; color: var(--texto-tenue); }
+
+.regla input[type='number'],
+.regla select {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--texto);
+}
+.regla input[type='number'] { width: 110px; font-family: 'Barlow Condensed', sans-serif; font-size: 17px; }
+.regla select { min-width: 330px; }
+
+.regla .interruptor { display: inline-flex; align-items: center; gap: 7px; font-weight: 400; min-width: 0; }
+.regla .interruptor input { width: 17px; height: 17px; }
+
+.regla .ayuda { margin: 8px 0 0; font-size: 13px; color: var(--texto-tenue); line-height: 1.5; }
+.regla .error { margin: 6px 0 0; font-size: 13px; color: var(--rojo); }
+
+#pie-reglas { margin-top: 16px; }
+#pie-reglas .rotulo { font-size: 13px; color: var(--texto-tenue); }
