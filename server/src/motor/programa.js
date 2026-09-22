@@ -12,12 +12,15 @@ import { ErrorDeDatos } from '../errores.js';
 
 /** Como le fue a una orden en la linea donde esta programada. */
 export class Corrida {
-  constructor(orden, kgHora, horasProduccion, horasCambio, kgProducibles) {
+  constructor(orden, kgHora, horasProduccion, horasCambio, kgProducibles, cambiaMedida = false) {
     this.orden = orden;
     this.kgHora = kgHora;
     this.horasProduccion = horasProduccion;
     this.horasCambio = horasCambio;
     this.kgProducibles = kgProducibles;
+    // Se guarda aparte porque horasCambio ya mezcla el cambio de rollo con
+    // el de medida, y hay que poder contar los de medida por separado.
+    this.cambiaMedida = cambiaMedida;
   }
 
   get completa() {
@@ -59,8 +62,13 @@ export class ResultadoLinea {
   get utilizacion() {
     return this.linea.horasDisponibles > 0 ? this.horasRequeridas / this.linea.horasDisponibles : 0;
   }
+  /** Cambios de MEDIDA, que son los que obligan a ajustar la linea. */
   get cambios() {
-    return this.corridas.filter((c) => c.horasCambio > 0).length;
+    return this.corridas.filter((c) => c.cambiaMedida).length;
+  }
+  /** Cambios de rollo: uno por cada rollo menos el primero. */
+  get cambiosRollo() {
+    return Math.max(0, this.corridas.filter((c) => !c.sinReceta).length - 1);
   }
   get sinReceta() {
     return this.corridas.filter((c) => c.sinReceta).map((c) => c.orden);
@@ -134,8 +142,16 @@ export function evaluarLinea(linea, ordenes, tabla) {
       continue;
     }
 
-    const cambia = diametroPrevio !== null && diametroPrevio !== orden.diametroMm;
-    const horasCambio = cambia ? linea.minutosCambio / 60 : 0;
+    // Dos costos distintos y que se suman:
+    //   ROLLO   cargar el siguiente cuesta aunque sea la misma medida y el
+    //           mismo numero de parte. No se cobra en el primero: no hay
+    //           nada antes que quitar.
+    //   MEDIDA  ademas hay que ajustar la linea cuando cambia el diametro.
+    const hayPrevio = diametroPrevio !== null;
+    const cambiaMedida = hayPrevio && diametroPrevio !== orden.diametroMm;
+    const horasCambio =
+      (hayPrevio ? linea.minutosCambioRollo / 60 : 0) +
+      (cambiaMedida ? linea.minutosCambio / 60 : 0);
     const horasProduccion = orden.kilogramos / kgh;
     diametroPrevio = orden.diametroMm;
 
@@ -144,7 +160,9 @@ export function evaluarLinea(linea, ordenes, tabla) {
     const kgProducibles = Math.min(orden.kilogramos, disponibles * kgh);
     restantes = Math.max(0, restantes - horasCambio - horasProduccion);
 
-    resultado.corridas.push(new Corrida(orden, kgh, horasProduccion, horasCambio, kgProducibles));
+    resultado.corridas.push(
+      new Corrida(orden, kgh, horasProduccion, horasCambio, kgProducibles, cambiaMedida),
+    );
   }
 
   return resultado;

@@ -237,6 +237,43 @@ function montarAnalisis(api = {}) {
   let lineaCorridas = '';
   const corridasAbiertas = new Set();
 
+  /**
+   * El rollo que cada línea trae corriendo AHORA.
+   *
+   *   linea -> { orden, desdeH, marcadoEn }
+   *
+   * Marcar uno ancla el reloj de esa línea a la hora real: ese rollo empieza
+   * ahora y todo lo que sigue se recorre igual. Cada línea lleva el suyo,
+   * porque las catorce corren a la vez y van a distinto ritmo.
+   *
+   * Vive en el navegador y NO en el folio: es estado de piso, cambia cada par
+   * de horas y el folio es el registro de lo que se analizó ese día.
+   */
+  let anclas = new Map();
+
+  function llaveAnclas() {
+    return `hiloflo.corriendo.${paquete?.folio ?? ''}`;
+  }
+
+  function cargarAnclas() {
+    anclas = new Map();
+    try {
+      const guardado = JSON.parse(localStorage.getItem(llaveAnclas()) ?? '{}');
+      for (const [linea, a] of Object.entries(guardado)) anclas.set(linea, a);
+    } catch {
+      // Sin localStorage (incógnito, cuota) la hoja sigue sirviendo: se pinta
+      // con el reloj del schedule y ya.
+    }
+  }
+
+  function guardarAnclas() {
+    try {
+      localStorage.setItem(llaveAnclas(), JSON.stringify(Object.fromEntries(anclas)));
+    } catch {
+      /* igual que arriba */
+    }
+  }
+
   const DIAS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   /**
@@ -252,10 +289,41 @@ function montarAnalisis(api = {}) {
   function reloj(horas) {
     const ancla = paquete?.inicioPrograma;
     if (!ancla) return `${num(horas, 1)} h`;
-    const d = new Date(new Date(ancla).getTime() + horas * 3600000);
+    return fecha(new Date(ancla).getTime() + horas * 3600000);
+  }
+
+  /** Marca de tiempo -> "Thu 17 · 14:35". */
+  function fecha(ms) {
+    const d = new Date(ms);
     const hh = String(d.getUTCHours()).padStart(2, '0');
     const mm = String(d.getUTCMinutes()).padStart(2, '0');
     return `${DIAS[d.getUTCDay()]} ${d.getUTCDate()} · ${hh}:${mm}`;
+  }
+
+  /**
+   * El reloj de UNA línea.
+   *
+   * Sin rollo marcado es el del schedule. Con rollo marcado, ese rollo empieza
+   * a la hora en que se marcó y lo demás se recorre igual: el pronóstico sale
+   * de las horas que ya calculó el motor, sólo cambia desde dónde se cuentan.
+   *
+   * Se usa la hora local convertida a los getters UTC para que el formato sea
+   * el mismo que el del schedule y no se lean dos relojes distintos.
+   */
+  function relojDe(linea, horas) {
+    const a = anclas.get(linea);
+    if (!a) return reloj(horas);
+    const d = new Date(a.marcadoEn);
+    const local = d.getTime() - d.getTimezoneOffset() * 60000;
+    return fecha(local + (horas - a.desdeH) * 3600000);
+  }
+
+  /** Antes del rollo marcado ya se corrió; ese mismo va corriendo. */
+  function estadoRollo(linea, rollo) {
+    const a = anclas.get(linea);
+    if (!a) return '';
+    if (rollo.orden === a.orden) return 'corriendo';
+    return rollo.inicioH < a.desdeH - 1e-9 ? 'hecha' : '';
   }
 
   function hojaActiva() {
@@ -275,6 +343,25 @@ function montarAnalisis(api = {}) {
   function pintarHojaCorridas() {
     const caja = $('hoja-corridas');
     if (!caja) return;
+    // Se engancha una sola vez, aquí y no en cada renglón: la tabla se vuelve
+    // a pintar completa en cada marca y los escuchas se acumularían.
+    if (!caja.dataset.enganchado) {
+      caja.dataset.enganchado = '1';
+      caja.addEventListener('change', (ev) => {
+        const casilla = ev.target.closest('input[data-corriendo]');
+        if (!casilla) return;
+        marcarCorriendo(
+          casilla.dataset.corriendo,
+          casilla.dataset.orden,
+          Number(casilla.dataset.desde),
+          casilla.checked,
+        );
+      });
+      // Picar la casilla no debe plegar la corrida que la contiene.
+      caja.addEventListener('click', (ev) => {
+        if (ev.target.closest('label.corre')) ev.stopPropagation();
+      });
+    }
     const hoja = hojaActiva();
 
     // Los folios guardados antes de que existiera esta pantalla no la traen.
@@ -312,12 +399,18 @@ function montarAnalisis(api = {}) {
 
   function tarjetaLinea(l) {
     const sobregiro = l.cierreH > l.horasDisponibles + 1e-6;
+    const a = anclas.get(l.linea);
+    // Con un rollo marcado, lo que importa ya no es cuánto dura la línea sino
+    // a qué hora acaba contando desde ahora. Eso es lo que se pone al frente.
+    const cierre = a
+      ? `now → ${relojDe(l.linea, l.cierreH)} · ${num(Math.max(0, l.cierreH - a.desdeH), 1)} h to go`
+      : `${reloj(0)} → ${reloj(l.cierreH)} · ${num(l.horas, 1)} h`;
     return `<div class="tarjeta">
       <h2>${l.linea}
         <small>${l.workCenter} · ${l.corridas} runs · ${num(l.rollos)} coils · ${num(l.kg / 1000, 1)} t</small>
-        <span class="cierre${sobregiro ? ' sobregiro' : ''}">
-          ${reloj(0)} → ${reloj(l.cierreH)} · ${num(l.horas, 1)} h
-          ${sobregiro ? `· ${num(l.cierreH - l.horasDisponibles, 1)} h past the ${num(l.horasDisponibles)} h horizon` : ''}
+        <span class="cierre${sobregiro ? ' sobregiro' : ''}${a ? ' anclado' : ''}">
+          ${cierre}
+          ${sobregiro && !a ? `· ${num(l.cierreH - l.horasDisponibles, 1)} h past the ${num(l.horasDisponibles)} h horizon` : ''}
         </span>
       </h2>
       <div class="cuerpo" style="padding:0"><div class="scroll">
@@ -325,7 +418,8 @@ function montarAnalisis(api = {}) {
           <thead><tr>
             <th>#</th><th>Part</th><th>Description</th><th class="n">Ø mm</th>
             <th class="n">Coils</th><th class="n">Tons</th><th class="n">kg/h</th>
-            <th class="n">Setup</th><th>Start</th><th>End</th><th class="n">Hours</th>
+            <th class="n" title="Coil changes plus the size changeover, if the diameter changes">Change</th>
+            <th>Start</th><th>End</th><th class="n">Hours</th>
           </tr></thead>
           <tbody>${l.secuencia.map((c) => renglonCorrida(l, c)).join('')}</tbody>
         </table>
@@ -357,20 +451,20 @@ function montarAnalisis(api = {}) {
         <td class="n">${num(c.kg / 1000, 1)}</td>
         <td class="n">${c.kgHora === null ? '—' : num(c.kgHora)}</td>
         <td class="n">${c.horasCambio > 0 ? `${num(c.horasCambio * 60)} min` : '—'}</td>
-        <td>${c.sinReceta ? '—' : reloj(c.inicioH)}</td>
-        <td>${c.sinReceta ? '—' : reloj(c.finH)}</td>
+        <td>${c.sinReceta ? '—' : relojDe(l.linea, c.inicioH)}</td>
+        <td>${c.sinReceta ? '—' : relojDe(l.linea, c.finH)}</td>
         <td class="n">${num(c.horasProduccion + c.horasCambio, 1)}</td>
       </tr>
       <tr class="rollos" data-de="${clave}"${abierta ? '' : ' hidden'}>
-        <td colspan="11">${tablaRollos(c)}</td>
+        <td colspan="11">${tablaRollos(l, c)}</td>
       </tr>`;
   }
 
-  function tablaRollos(c) {
+  function tablaRollos(l, c) {
     const por = ordenesPorId();
     return `<table class="rollos">
       <thead><tr>
-        <th class="izq">Order</th><th class="n">kg</th>
+        <th class="izq">Running</th><th class="izq">Order</th><th class="n">kg</th>
         <th class="izq">Start</th><th class="izq">End</th>
         <th class="izq">Customer PO</th><th class="izq">Notes</th>
       </tr></thead>
@@ -378,17 +472,38 @@ function montarAnalisis(api = {}) {
         .map((r) => {
           const o = por.get(r.orden);
           const parcial = !r.completo && !r.sinReceta;
-          return `<tr${parcial ? ' class="fuera"' : ''}>
+          const estado = estadoRollo(l.linea, r);
+          const clases = [parcial ? 'fuera' : '', estado].filter(Boolean).join(' ');
+          return `<tr${clases ? ` class="${clases}"` : ''}>
+            <td class="izq">
+              <label class="corre" title="Mark the coil this line is running now">
+                <input type="checkbox" data-corriendo="${l.linea}" data-orden="${r.orden}"
+                       data-desde="${r.inicioH}"${estado === 'corriendo' ? ' checked' : ''}>
+              </label>
+            </td>
             <td class="izq">${r.orden}</td>
             <td class="n">${num(r.kg)}${parcial ? ' <span class="marca mala">does not fit</span>' : ''}</td>
-            <td class="izq">${r.sinReceta ? '—' : reloj(r.inicioH)}</td>
-            <td class="izq">${r.sinReceta ? '—' : reloj(r.finH)}</td>
+            <td class="izq">${r.sinReceta ? '—' : relojDe(l.linea, r.inicioH)}</td>
+            <td class="izq">${r.sinReceta ? '—' : relojDe(l.linea, r.finH)}</td>
             <td class="izq">${o?.clientePo || '—'}</td>
             <td class="izq notas">${o?.notas || ''}</td>
           </tr>`;
         })
         .join('')}</tbody>
     </table>`;
+  }
+
+  /**
+   * Marcar (o desmarcar) el rollo que una línea trae corriendo.
+   *
+   * Sólo puede haber uno por línea: marcar otro reemplaza al anterior, que es
+   * lo que pasa de verdad cuando la línea avanza al siguiente.
+   */
+  function marcarCorriendo(linea, orden, desdeH, encendido) {
+    if (encendido) anclas.set(linea, { orden, desdeH, marcadoEn: new Date().toISOString() });
+    else anclas.delete(linea);
+    guardarAnclas();
+    pintarHojaCorridas();
   }
 
   function pintarTablero() {
@@ -855,6 +970,7 @@ function montarAnalisis(api = {}) {
       // Un folio nuevo no hereda lo que estaba desplegado del anterior.
       corridasAbiertas.clear();
       lineaCorridas = '';
+      cargarAnclas();
       pintarHojaCorridas();
       if (api.obtenerMatriz) pintarMatrizRendimiento(await api.obtenerMatriz(paquete));
     },

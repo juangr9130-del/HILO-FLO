@@ -505,3 +505,18 @@ table.rollos td.notas {
 
 #pie-reglas { margin-top: 16px; }
 #pie-reglas .rotulo { font-size: 13px; color: var(--texto-tenue); }
+
+/* ---------- Rollo en curso ---------- */
+
+/* La casilla vive dentro de un renglón que se pliega al picarlo, así que se
+   le da su propia área y se para la propagación del clic. */
+label.corre { display: inline-flex; align-items: center; cursor: pointer; padding: 2px 4px; }
+label.corre input { width: 15px; height: 15px; cursor: pointer; }
+
+/* El que va corriendo, y lo que ya quedó atrás. */
+table.rollos tr.corriendo td { background: #eaf4ec; box-shadow: inset 3px 0 0 var(--verde); font-weight: 600; }
+table.rollos tr.hecha td { color: #aab3bd; }
+table.rollos tr.hecha td.notas { color: #c2c9d1; }
+
+/* El cierre de una línea anclada es un pronóstico, no el plan: se distingue. */
+.tarjeta > h2 .cierre.anclado { color: var(--verde); font-weight: 600; }

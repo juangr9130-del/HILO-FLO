@@ -84,13 +84,50 @@ test('las toneladas del desglose salen del ritmo ya rebalanceado', () => {
 
 test('los cambios evitados cuadran con las horas de cambio', () => {
   const a = paqueteDePrueba().analisis;
-  const minutos = SUPUESTOS.minutosCambio;
 
   assert.equal(a.cambiosEvitados, a.cambiosActual - a.cambiosPropuesto);
+
+  // Las horas de cambio son DOS costos que se suman: el de medida, que se
+  // cobra cuando cambia el diametro, y el de rollo, que se cobra entre cada
+  // dos rollos aunque no cambie nada. Si la cuenta no cierra, una de las dos
+  // se esta perdiendo o contando dos veces.
+  const rolloEvitados = a.cambiosRolloActual - a.cambiosRolloPropuesto;
+  const esperado =
+    (a.cambiosEvitados * SUPUESTOS.minutosCambio +
+      rolloEvitados * SUPUESTOS.minutosCambioRollo) /
+    60;
   assert.ok(
-    Math.abs(a.horasCambioAhorradas - (a.cambiosEvitados * minutos) / 60) <= 0.1,
-    `${a.cambiosEvitados} cambios a ${minutos} min no dan ${a.horasCambioAhorradas} h`,
+    Math.abs(a.horasCambioAhorradas - esperado) <= 0.1,
+    `${a.cambiosEvitados} de medida y ${rolloEvitados} de rollo dan ${esperado} h, no ${a.horasCambioAhorradas}`,
   );
+});
+
+test('el cambio de rollo se cobra entre rollos aunque no cambie la medida', () => {
+  // Tres rollos del MISMO diametro y el mismo numero de parte en una linea:
+  // cero cambios de medida, pero dos cambios de rollo.
+  const sup = { ...SUPUESTOS, minutosCambio: 30, minutosCambioRollo: 20 };
+  const prog = programa(
+    [1, 2, 3].map((i) => orden(`O${i}`, 10, 6000, 'ITW-2', { secuencia: i, material: 'P' })),
+  );
+  const { evaluacion } = analizar(prog, puntos, sup);
+  const r = evaluacion.lineas.get('ITW-2');
+
+  assert.equal(r.cambios, 0, 'no hubo cambio de medida');
+  assert.equal(r.cambiosRollo, 2, 'tres rollos son dos cambios de rollo');
+  assert.ok(Math.abs(r.horasCambio - (2 * 20) / 60) < 1e-6, `${r.horasCambio} h de cambio`);
+});
+
+test('cuando ademas cambia la medida, los dos costos se suman', () => {
+  const sup = { ...SUPUESTOS, minutosCambio: 30, minutosCambioRollo: 20 };
+  const prog = programa([
+    orden('A', 10, 6000, 'ITW-2', { secuencia: 1 }),
+    orden('B', 12, 6000, 'ITW-2', { secuencia: 2 }),
+  ]);
+  const r = analizar(prog, puntos, sup).evaluacion.lineas.get('ITW-2');
+
+  assert.equal(r.cambios, 1);
+  assert.equal(r.cambiosRollo, 1);
+  assert.ok(Math.abs(r.horasCambio - 50 / 60) < 1e-6, `deberian ser 50 min, son ${r.horasCambio * 60}`);
 });
 
 test('el desglose nunca reporta una perdida como ganancia', () => {

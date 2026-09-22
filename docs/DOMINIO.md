@@ -114,8 +114,17 @@ hay receta.
 Por cada línea, en la secuencia en que están programadas sus órdenes:
 
 - **horas de corrida** = kg / (kg/h)
-- **horas de cambio** = un cambio de medida cada vez que el diámetro cambia
-  respecto a la orden anterior
+- **horas de cambio** = dos costos que se **suman**:
+  - **cambio de rollo**: cargar el siguiente cuesta aunque sea la misma medida
+    y el mismo número de parte. Se cobra entre cada dos rollos, nunca en el
+    primero de la línea (no hay nada antes que quitar).
+  - **cambio de medida**: además hay que ajustar la línea cuando el diámetro
+    cambia respecto a la orden anterior.
+
+  Un rollo que además cambia de diámetro cuesta los dos. Con los estándares de
+  Florence (20 y 30 min), el cambio de rollo resultó ser **el grueso**: sobre
+  el schedule del 17/09 son 458 cambios de rollo contra 76 de medida, o sea
+  **152.7 h contra 38 h**. La utilización promedio pasa de 66 % a 73.5 %
 - se van consumiendo las horas disponibles del horizonte; lo que ya no cabe
   se reporta como kilogramos no producibles
 
@@ -146,6 +155,28 @@ Lo que no cabe en el horizonte se **marca**, no se esconde: la corrida sale
 en rojo con «past horizon» y el rollo que se parte a la mitad dice «does not
 fit». Una corrida sin receta no consume reloj (la línea no la puede correr)
 pero también aparece.
+
+### El rollo que va corriendo
+
+La hoja de corridas trae una casilla por rollo. Al marcar el que una línea
+**trae corriendo ahora**, el reloj de esa línea se ancla a la hora real: ese
+rollo empieza en ese momento y todo lo que sigue se recorre igual, así que el
+encabezado deja de decir cuánto dura la línea y pasa a decir **a qué hora
+acaba contando desde ahora**. Los rollos anteriores se pintan apagados y el
+marcado en verde.
+
+Cada línea lleva el suyo: las catorce corren a la vez y van a distinto ritmo.
+Marcar otro rollo reemplaza al anterior, que es lo que pasa cuando la línea
+avanza.
+
+Se asume que el rollo marcado **apenas empieza**. Si ya va a la mitad, el
+pronóstico se pasa por lo que le falta a ese rollo (~1–3 h). Es a propósito:
+pedir el porcentaje de avance sería más exacto y mucho más fastidioso de
+capturar a cada rato.
+
+Esa marca vive en el navegador y **no en el folio**: es estado de piso, cambia
+cada par de horas, y el folio es el registro de lo que se analizó ese día. Se
+guarda por folio, así que sobrevive a recargar la página.
 
 ## Cómo se buscan las áreas de oportunidad
 

@@ -22,6 +22,15 @@ export const SUPUESTOS = {
   horasDisponibles: 144,
   eficiencia: 1,
   minutosCambio: 30,
+
+  /**
+   * Cargar el rollo siguiente, aunque no cambie nada mas.
+   *
+   * Es APARTE del cambio de medida y se suma a el: de rollo a rollo del mismo
+   * diametro y el mismo numero de parte cuestan 20 min; si ademas cambia el
+   * diametro, esos 20 mas los 30 del ajuste. Es el estandar que dio Florence.
+   */
+  minutosCambioRollo: 20,
   maxMovimientos: 400,
 
   /**
@@ -65,20 +74,12 @@ export function catalogoLineas({
   horasDisponibles = SUPUESTOS.horasDisponibles,
   eficiencia = SUPUESTOS.eficiencia,
   minutosCambio = SUPUESTOS.minutosCambio,
+  minutosCambioRollo = SUPUESTOS.minutosCambioRollo,
   itw15Activa = false,
 } = {}) {
-  const lineas = LINEAS_INSTALADAS.map(
-    (clave) => new Linea({ clave, horasDisponibles, eficiencia, minutosCambio }),
-  );
-  lineas.push(
-    new Linea({
-      clave: LINEA_POR_INSTALAR,
-      horasDisponibles,
-      eficiencia,
-      minutosCambio,
-      activa: itw15Activa,
-    }),
-  );
+  const comun = { horasDisponibles, eficiencia, minutosCambio, minutosCambioRollo };
+  const lineas = LINEAS_INSTALADAS.map((clave) => new Linea({ clave, ...comun }));
+  lineas.push(new Linea({ clave: LINEA_POR_INSTALAR, ...comun, activa: itw15Activa }));
   return lineas;
 }
 
@@ -264,13 +265,22 @@ function productividad(evaluacion, ev2, propuesta) {
     let produccion = 0;
     let cambio = 0;
     let cambios = 0;
+    let cambiosRollo = 0;
     for (const r of ev.lineas.values()) {
       kg += r.kgProgramados;
       produccion += r.horasProduccion;
       cambio += r.horasCambio;
       cambios += r.cambios;
+      cambiosRollo += r.cambiosRollo;
     }
-    return { kg, produccion, cambio, cambios, ritmo: produccion > 0 ? kg / produccion : 0 };
+    return {
+      kg,
+      produccion,
+      cambio,
+      cambios,
+      cambiosRollo,
+      ritmo: produccion > 0 ? kg / produccion : 0,
+    };
   };
 
   const a = totales(evaluacion);
@@ -303,6 +313,11 @@ function productividad(evaluacion, ev2, propuesta) {
     cambiosActual: a.cambios,
     cambiosPropuesto: d.cambios,
     cambiosEvitados: a.cambios - d.cambios,
+    // Los cambios de rollo son casi una constante: hay uno por rollo menos
+    // uno por linea con carga, asi que solo se mueven si una linea se vacia.
+    // Se publican igual, para que las horas de cambio cuadren.
+    cambiosRolloActual: a.cambiosRollo,
+    cambiosRolloPropuesto: d.cambiosRollo,
 
     toneladasPorRitmo: redondear(enToneladas(horasProduccionAhorradas), 1),
     toneladasPorCambios: redondear(enToneladas(horasCambioAhorradas), 1),

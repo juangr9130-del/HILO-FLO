@@ -63,6 +63,18 @@ export const REGLAS = [
       'The result barely moves between 0 and 90 min, so this is not a sensitive number.',
   },
   {
+    clave: 'minutosCambioRollo',
+    etiqueta: 'Coil change',
+    unidad: 'min',
+    tipo: 'numero',
+    min: 0,
+    max: 480,
+    ayuda:
+      'Charged between every two coils on a line, even when the size and the part ' +
+      'number are the same — loading the next coil costs time either way. It adds to ' +
+      'the size changeover: a coil that also changes diameter costs both.',
+  },
+  {
     clave: 'eficiencia',
     etiqueta: 'Operating efficiency',
     tipo: 'numero',

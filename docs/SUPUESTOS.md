@@ -13,7 +13,8 @@ aritmética. Hoy se corre con:
 |---|---|---|
 | horas disponibles por línea | 144 h (6 días × 24 h) | `FLO_HORAS` / `flo_parametro_linea` |
 | eficiencia operativa | **desactivada (100 %)** | `FLO_EFICIENCIA` |
-| minutos por cambio de medida | 30 min | `FLO_MINUTOS_CAMBIO` |
+| minutos por cambio de medida | 30 min | `SUPUESTOS.minutosCambio` |
+| minutos por cambio de rollo | 20 min | `SUPUESTOS.minutosCambioRollo` |
 | objetivo del reajuste | `rendimiento` | `SUPUESTOS.objetivo` |
 | tope de cambio por línea | ±5 rollos | `SUPUESTOS.topeOrdenes` |
 
@@ -25,7 +26,21 @@ lo que la línea más cargada ya corre en el programa (ver sección 2d).
 La eficiencia está **apagada a propósito**: por ahora el análisis se hace
 contra la velocidad de receta tal cual. Cuando haya un OEE medido se prende.
 
-Los **30 minutos** son el estándar que dio Florence. El tiempo de cambio
+Los **30 minutos** del cambio de medida y los **20 del cambio de rollo** son
+los estándares que dio Florence. **Se suman**: un rollo que además cambia de
+diámetro cuesta 50 min.
+
+El cambio de rollo resultó ser **el grueso del tiempo perdido**, que no era
+obvio: se cobra entre cada dos rollos aunque no cambie nada, y hay 458 de
+ésos contra 76 cambios de medida. Son **152.7 h contra 38 h** sobre el
+schedule del 17/09, y suben la utilización promedio de la planta de 66 % a
+73.5 %.
+
+**Pendiente de confirmar:** que los dos se sumen. Si los 30 minutos del ajuste
+de medida ya incluyen quitar y poner el rollo, entonces no se suman y hay que
+cobrar 30, no 50. Aquí se suman porque es lo que describió Florence («agregar
+20 minutos en el cambio de rollo») y porque HILO en México ya los maneja como
+dos parámetros distintos. El tiempo de cambio
 resultó además **poco sensible**: entre 0 y 90 minutos el incremento de
 producción calculado se mueve menos de 1 %.
 

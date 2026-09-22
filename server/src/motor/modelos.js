@@ -68,6 +68,7 @@ export class Linea {
     horasDisponibles = 0,
     eficiencia = 1,
     minutosCambio = 0,
+    minutosCambioRollo = 0,
     activa = true,
   }) {
     if (!(eficiencia > 0 && eficiencia <= 1)) {
@@ -80,6 +81,10 @@ export class Linea {
     this.horasDisponibles = horasDisponibles;
     this.eficiencia = eficiencia;
     this.minutosCambio = minutosCambio;
+    // Cargar el rollo siguiente cuesta aunque no cambie nada mas: misma
+    // medida, mismo numero de parte. Es aparte del cambio de medida y se
+    // SUMA a el cuando ademas hay que ajustar la linea.
+    this.minutosCambioRollo = minutosCambioRollo;
     this.activa = activa;
     Object.freeze(this);
   }
