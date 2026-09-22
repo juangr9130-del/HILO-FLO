@@ -174,7 +174,7 @@ function montarAnalisis(api = {}) {
       : '';
     const pintores = {
       devanador_no_indicado: pintarAvisoDevanador,
-      piso_alcanzado: pintarAvisoPiso,
+      tope_alcanzado: pintarAvisoTope,
     };
     $('avisos').innerHTML = desactualizado + avisos
       .map((av) => (pintores[av.tipo] ?? pintarAvisoSinReceta)(av))
@@ -195,18 +195,20 @@ function montarAnalisis(api = {}) {
     </div>`;
   }
 
-  function pintarAvisoPiso(av) {
+  function pintarAvisoTope(av) {
+    const una = av.lineas.length === 1;
     return `<div class="aviso nota">
-      <strong>${av.lineas.length === 1 ? 'One line' : `${av.lineas.length} lines`} hit the
-      ${num(av.piso)} h floor, so some improvements were held back.</strong>
-      There was material that runs faster elsewhere, but moving it would have left
-      ${av.lineas.length === 1 ? 'the line' : 'those lines'} with almost nothing to run.
+      <strong>${una ? 'One line' : `${av.lineas.length} lines`} hit the
+      ±${num(av.tope)} coil limit, so some improvements were held back.</strong>
+      There was material that runs faster elsewhere, but moving it would have pulled
+      ${una ? 'that line' : 'those lines'} further than ±${num(av.tope)} coils from what
+      you scheduled.
       <div style="margin-top:5px;color:var(--texto-tenue)">
-        ${av.lineas.map((l) => `${l.linea}: ${num(l.horas, 1)} h, ${l.ordenes} coils`).join(' · ')}
+        ${av.lineas.map((l) => `${l.linea}: ${l.cambio > 0 ? '+' : ''}${num(l.cambio)} coils (${l.ordenes} total)`).join(' · ')}
       </div>
       <div style="margin-top:5px">
-        If ${av.lineas.length === 1 ? 'that line' : 'any of those lines'} is not going to run
-        this week anyway, lower the floor and the module will take those moves.
+        If ${una ? 'that line' : 'any of those lines'} can take a bigger change this week,
+        raise the limit and the module will take those moves.
       </div>
     </div>`;
   }

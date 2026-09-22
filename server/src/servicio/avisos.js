@@ -86,25 +86,27 @@ export function avisoSinReceta(evaluacion) {
 }
 
 /**
- * Lineas donde el piso freno una mejora.
+ * Lineas que se toparon con el limite de rollos.
  *
  * El algoritmo encontro material que corre mas rapido en otro lado, pero
- * moverlo dejaba la linea casi sin trabajo. Eso es una decision de planta,
- * no del algoritmo, asi que se dice en vez de esconderse: si esa semana la
- * linea de todos modos no se va a correr, el programador puede bajar el piso
- * y quedarse con la mejora.
+ * moverlo apartaba la linea mas de lo permitido de lo que el programador
+ * escribio. Eso es decision suya y no del algoritmo, asi que se dice en vez
+ * de esconderse: si esa semana esa linea si aguanta mas cambio, sube el tope
+ * y se queda con la mejora.
  */
-export function avisoPiso(propuesta) {
-  const lineas = propuesta.lineasEnElPiso?.() ?? [];
+export function avisoTope(propuesta) {
+  const lineas = propuesta.lineasEnElTope?.() ?? [];
   if (!lineas.length) return null;
   return {
-    tipo: 'piso_alcanzado',
+    tipo: 'tope_alcanzado',
     severidad: 'nota',
-    piso: propuesta.limites.piso,
+    tope: propuesta.limites.topeOrdenes,
     lineas: lineas.map((clave) => ({
       linea: clave,
-      horas: propuesta.evaluacionPropuesta.lineas.get(clave).horasRequeridas,
       ordenes: propuesta.evaluacionPropuesta.lineas.get(clave).corridas.length,
+      cambio:
+        propuesta.evaluacionPropuesta.lineas.get(clave).corridas.length -
+        propuesta.evaluacionOriginal.lineas.get(clave).corridas.length,
     })),
   };
 }
@@ -115,7 +117,7 @@ export function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = nu
   return [
     avisoSinReceta(evaluacion),
     avisoDevanador(programa, lineas, tabla, evaluacion),
-    propuesta ? avisoPiso(propuesta) : null,
+    propuesta ? avisoTope(propuesta) : null,
   ]
     .filter(Boolean)
     .sort((a, b) => orden[a.severidad] - orden[b.severidad]);

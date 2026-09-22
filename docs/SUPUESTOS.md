@@ -15,7 +15,7 @@ aritmética. Hoy se corre con:
 | eficiencia operativa | **desactivada (100 %)** | `FLO_EFICIENCIA` |
 | minutos por cambio de medida | 30 min | `FLO_MINUTOS_CAMBIO` |
 | objetivo del reajuste | `rendimiento` | `SUPUESTOS.objetivo` |
-| piso de horas por línea | 60 h | `SUPUESTOS.pisoHoras` |
+| tope de cambio por línea | ±5 rollos | `SUPUESTOS.topeOrdenes` |
 
 **Las 144 h son relleno, y Florence lo confirmó**: se pusieron porque no
 había forma de ver las horas programadas por línea, no porque se hayan
@@ -185,14 +185,14 @@ El de rendimiento gana más del doble de horas y no degrada ningún material,
 pero deja la línea más cargada en 143.9 h — pegada al horizonte de 144 h,
 que es justo el supuesto sin verificar de la sección D.
 
-### La decisión de Florence: RENDIMIENTO, con piso de 60 h
+### La decisión de Florence: RENDIMIENTO, con tope de ±5 rollos
 
-Florence eligió probar el objetivo de **rendimiento**. Se implementó como
-opción conmutable: el objetivo de calendario sigue vivo y con sus pruebas, y
-regresar es cambiar `SUPUESTOS.objetivo` a `'calendario'`.
+Florence eligió el objetivo de **rendimiento**. Se implementó como opción
+conmutable: el objetivo de calendario sigue vivo y con sus pruebas, y regresar
+es cambiar `SUPUESTOS.objetivo` a `'calendario'`.
 
 El objetivo de rendimiento viene con **dos límites**, sin los cuales no se
-debe usar:
+debe usar.
 
 **Techo = lo que la línea más cargada YA corre hoy** (129.6 h en el schedule
 del 17/09). No es un supuesto: si ITW-2 corre esas horas esta semana, son
@@ -200,29 +200,45 @@ demostrablemente factibles. Se usa esto y **no las 144 h**, porque Florence
 confirmó que ese 144 es relleno — se puso porque no había forma de ver las
 horas por línea, no porque se haya medido.
 
-**Piso = 60 h de trabajo por línea.** Sin piso, el objetivo de rendimiento
-vacía las líneas lentas: sobre el 17/09 dejaba **ITW-3 con UN rollo y 2.8 h**.
-Una línea así está apagada en los hechos y eso no se puede proponer. Los 60 h
-los eligió Florence.
+**Tope = ±5 rollos por línea** respecto de lo que el programador escribió.
+Sin freno, el objetivo de rendimiento vacía las líneas lentas: sobre el 17/09
+dejaba **una línea con UN rollo**.
+
+Primero se probó un **piso de 60 h de trabajo por línea**, y se reemplazó por
+el tope a petición de Florence. La medición le dio la razón:
+
+- **con tope de 5, el piso ya no cambiaba ni un movimiento** — una línea que
+  no puede soltar más de 5 rollos no se queda vacía sola, así que el piso
+  sobraba;
+- el **rollo es la unidad en la que el programador piensa** y en la que tiene
+  que defender el cambio, no la hora;
+- el tope limita el **cambio**, que es lo que cuesta vender en piso; el piso
+  limitaba el **resultado**, que es más difícil de juzgar.
 
 Resultado sobre el schedule del 17/09:
 
-| | calendario | rendimiento (piso 60 h) |
-|---|---|---|
-| rollos a mover | 69 en 19 movimientos | 118 en 21 movimientos |
-| horas de planta | 1 329 → 1 303 (**−25.7 h**) | 1 329 → 1 262 (**−67.0 h**) |
-| ritmo de planta | 840 → 856 kg/h (+2.0 %) | 840 → 883 kg/h (**+5.1 %**) |
-| toneladas por tiempo ganado | 22.0 t | **59.2 t** |
-| cierre del programa | **95.2 h** | 129.1 h |
-| movimientos a línea más lenta | **4** | **0** |
-| línea más floja | 89.6 h / 21 rollos | 61.2 h / 16 rollos |
+| | calendario | **rendimiento ±5** | rendimiento ±10 | rendimiento sin tope |
+|---|---|---|---|---|
+| rollos a mover | 69 en 19 movs | **44 en 12 movs** | 84 en 15 | 185 en 28 |
+| horas de planta ganadas | 25.7 h | **26.2 h** | 46.2 h | 91.4 h |
+| toneladas | 22.0 t | **22.4 t** | 40.1 t | 82.3 t |
+| ritmo de planta | 856 kg/h | **856 kg/h** | 869 kg/h | 901 kg/h |
+| movimientos a línea más lenta | **4** | **0** | 0 | 0 |
+| cambio máximo en una línea | ±12 rollos | **±5** | ±10 | ±32 |
+| línea más floja queda con | 21 rollos | **28 rollos** | 23 | **1 rollo** |
 
-El intercambio, en una línea: **rendimiento gana 2.7× más horas de máquina y
-no degrada ningún material, pero el programa no cierra antes.**
+Lo que compra el ±5 contra el objetivo viejo: **la misma tonelada (22.4 contra
+22.0 t) con mucho menos movimiento** — 44 rollos en vez de 69, ninguna línea
+cambia más de 5 — y **sin degradar un solo rollo**, contra los 4 movimientos
+a línea más lenta que hacía el de calendario. Lo que cuesta: el programa ya no
+cierra antes (129.3 h contra 95.2 h).
 
-Cuando el piso frena una mejora, la pantalla lo dice con las líneas y las
-horas en que quedaron. Si esa semana alguna de esas líneas no se va a correr
-de todos modos, el programador baja el piso y se queda con la mejora.
+Subir el tope compra más: con ±10 son 40.1 t. Es la perilla a mover cuando
+Florence vea qué tanto cambio aguanta el piso de verdad.
+
+Cuando el tope frena una mejora, la pantalla lo dice con las líneas y cuántos
+rollos cambiaron. Si esa semana alguna aguanta más, se sube el tope y se toma
+la mejora.
 
 ## 3. Rango de diámetros por línea — RESUELTO
 

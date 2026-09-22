@@ -73,23 +73,34 @@ export const OBJETIVOS = ['rendimiento', 'calendario'];
  * lo da planta; 60 h es lo que eligio Florence para probar.
  */
 export class Limites {
-  constructor({ techo = Infinity, piso = 0 } = {}) {
+  constructor({ techo = Infinity, topeOrdenes = Infinity } = {}) {
     this.techo = techo;
-    this.piso = piso;
+    this.topeOrdenes = topeOrdenes;
   }
 
   /**
-   * @param {number} horasOrigen  horas de la linea de la que sale material
-   * @param {number} horasDestino horas de la linea que lo recibe
+   * Cuanto se puede apartar una linea de las ordenes que traia.
+   *
+   * Es el limite en las unidades del programador: "que ninguna linea cambie
+   * mas de N rollos respecto a lo que yo programe". Reemplaza a un piso en
+   * horas que hubo antes: se midio que con un tope de 5 el piso ya no
+   * cambiaba nada -- una linea que no puede perder mas de 5 rollos no se
+   * queda vacia sola -- y ademas el rollo es la unidad en la que el
+   * programador piensa.
+   */
+  aguantaCarga(ordenesAntes, ordenesDespues) {
+    return Math.abs(ordenesDespues - ordenesAntes) <= this.topeOrdenes;
+  }
+
+  /**
+   * @param {number} horasDestino horas de la linea que recibe material
    * @param {number} deltaKg      tonelada que el movimiento rescata
    */
-  permite(horasOrigen, horasDestino, deltaKg) {
-    // Rescatar tonelada que hoy no se produce gana sobre los dos limites:
-    // correr algo tarde es mejor que no correrlo.
+  permite(horasDestino, deltaKg) {
+    // Rescatar tonelada que hoy no se produce gana sobre el techo: correr
+    // algo tarde es mejor que no correrlo.
     if (deltaKg > 1e-6) return true;
-    if (horasDestino > this.techo + 1e-6) return false;
-    if (horasOrigen < this.piso - 1e-6) return false;
-    return true;
+    return horasDestino <= this.techo + 1e-6;
   }
 }
 
@@ -160,27 +171,23 @@ export class Propuesta {
   }
 
   /**
-   * Las lineas donde el piso freno una mejora.
+   * Las lineas que se toparon con el limite de rollos.
    *
    * Ahi habia material que corria mas rapido en otro lado, pero moverlo
-   * dejaba la linea sin trabajo. El programador tiene que verlo, porque es
-   * una decision de planta y no del algoritmo.
-   *
-   * Se piden las DOS condiciones: que la linea haya perdido carga y que haya
-   * quedado pegada al piso. Solo lo segundo marca de mas a las lineas que
-   * quedaron ligeras porque son rapidas, no porque se les haya frenado nada.
+   * apartaba la linea mas de lo permitido respecto de lo que el programador
+   * escribio. Tiene que verlo: es decision suya y no del algoritmo, y si esa
+   * semana esa linea si aguanta mas cambio, sube el tope y se queda con la
+   * mejora.
    */
-  lineasEnElPiso() {
-    if (!(this.limites.piso > 0)) return [];
+  lineasEnElTope() {
+    if (!Number.isFinite(this.limites.topeOrdenes)) return [];
     const topadas = [];
     for (const [clave, r] of this.evaluacionPropuesta.lineas) {
-      if (!r.corridas.length) continue;
       const antes = this.evaluacionOriginal.lineas.get(clave);
-      if (!antes || r.horasRequeridas >= antes.horasRequeridas - 1e-6) continue;
-      // Una banda del 5% y no la igualdad exacta: la linea se frena en el
-      // primer movimiento que la bajaria del piso, asi que queda un poco
-      // ARRIBA, no clavada en el numero.
-      if (r.horasRequeridas <= this.limites.piso * 1.05) topadas.push(clave);
+      if (!antes) continue;
+      if (Math.abs(r.corridas.length - antes.corridas.length) >= this.limites.topeOrdenes) {
+        topadas.push(clave);
+      }
     }
     return topadas;
   }
@@ -284,6 +291,9 @@ class Estado {
     this.objetivo = objetivo;
     this.limites = limites;
     this.asignacion = new Map(lineas.map((l) => [l.clave, programa.deLinea(l.clave)]));
+    // Cuantas ordenes traia cada linea: el tope se mide contra ESTO y no
+    // contra la vuelta anterior, si no la busqueda se aleja de a poquito.
+    this.ordenesIniciales = new Map(lineas.map((l) => [l.clave, programa.deLinea(l.clave).length]));
     this.valor = new Map();
     for (const [clave, ordenes] of this.asignacion) {
       this.valor.set(clave, this._valor(clave, ordenes));
@@ -324,16 +334,21 @@ class Estado {
       deltaHoras += this.valor.get(clave)[1] - candidato.get(clave)[1];
     }
 
-    // Los limites se revisan contra las horas que quedarian, linea por linea:
-    // una permuta mueve material en los dos sentidos y cada lado tiene que
-    // aguantar tanto el techo como el piso.
+    // Los limites se revisan linea por linea: una permuta mueve material en
+    // los dos sentidos y cada lado tiene que aguantar el techo y el tope.
     let dentro = true;
-    for (const clave of claves) {
-      const antes = this.valor.get(clave)[1];
+    claves.forEach((clave, i) => {
       const despues = candidato.get(clave)[1];
-      if (despues > antes && !this.limites.permite(Infinity, despues, deltaKg)) dentro = false;
-      if (despues < antes && !this.limites.permite(despues, 0, deltaKg)) dentro = false;
-    }
+      if (despues > this.valor.get(clave)[1] && !this.limites.permite(despues, deltaKg)) {
+        dentro = false;
+      }
+      if (
+        deltaKg <= 1e-6 &&
+        !this.limites.aguantaCarga(this.ordenesIniciales.get(clave), nuevos[i].length)
+      ) {
+        dentro = false;
+      }
+    });
     return [puntaje, deltaKg, deltaHoras, dentro];
   }
 
@@ -432,7 +447,7 @@ export function buscarOportunidades(
     umbralKg = UMBRAL_KG,
     umbralHoras = UMBRAL_HORAS,
     objetivo = 'calendario',
-    pisoHoras = 0,
+    topeOrdenes = Infinity,
   } = {},
 ) {
   const evaluacionInicial = evaluarPrograma(programa, lineas, tabla);
@@ -441,7 +456,7 @@ export function buscarOportunidades(
   // cargada de hoy demuestra que esas horas se pueden correr.
   const limites =
     objetivo === 'rendimiento'
-      ? new Limites({ techo: evaluacionInicial.makespan, piso: pisoHoras })
+      ? new Limites({ techo: evaluacionInicial.makespan, topeOrdenes })
       : new Limites();
   const estado = new Estado(programa, lineas, tabla, { objetivo, limites });
   const destinosValidos = new Set(lineas.filter((l) => l.activa).map((l) => l.clave));

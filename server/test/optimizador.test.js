@@ -136,7 +136,7 @@ test('la propuesta nunca empeora el schedule', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Objetivo de rendimiento, con techo y piso
+// Objetivo de rendimiento, con techo y tope de rollos
 // ---------------------------------------------------------------------------
 
 /** kg/h de esa orden en esa linea, para comparar origen contra destino. */
@@ -173,7 +173,7 @@ test('calendario si puede mandarlo a una linea mas lenta, y por eso empareja', (
   assert.ok(r.get('ITW-1').horasRequeridas > 0, 'calendario debe repartir hacia ITW-1');
 });
 
-// Lineas con horizonte holgado: asi nada se queda fuera y el piso se prueba
+// Lineas con horizonte holgado: asi nada se queda fuera y el tope se prueba
 // solo, sin que la excepcion de "rescatar tonelada" lo pase por encima.
 const lineasHolgadas = () => [
   linea('ITW-1', { horasDisponibles: 300 }),
@@ -187,59 +187,64 @@ const ochoEnItw1 = () =>
     [1, 2, 3, 4, 5, 6, 7, 8].map((n) => orden(`A${n}`, 14.7, 6000, 'ITW-1', { secuencia: n })),
   );
 
-test('el piso impide dejar una linea sin trabajo', () => {
+test('el tope impide dejar una linea sin trabajo', () => {
   const p = ochoEnItw1();
 
-  // Sin piso, las ocho se van a ITW-7 (el doble de rapida) y ITW-1 queda vacia.
-  const sinPiso = buscarOportunidades(p, lineasHolgadas(), tabla(), { objetivo: 'rendimiento' });
+  // Sin tope, las ocho se van a ITW-7 (el doble de rapida) y ITW-1 queda vacia.
+  const sinTope = buscarOportunidades(p, lineasHolgadas(), tabla(), { objetivo: 'rendimiento' });
   assert.equal(
-    sinPiso.evaluacionPropuesta.lineas.get('ITW-1').corridas.length,
+    sinTope.evaluacionPropuesta.lineas.get('ITW-1').corridas.length,
     0,
-    'sin piso, el rendimiento puro vacia la linea lenta',
+    'sin tope, el rendimiento puro vacia la linea lenta',
   );
 
-  // Con piso de 60 h solo pueden irse tres (100 - 3 x 12.5 = 62.5 h); la
-  // cuarta la dejaria en 50 h y se frena.
-  const conPiso = buscarOportunidades(p, lineasHolgadas(), tabla(), {
+  // Con tope de 5 rollos ITW-1 no puede soltar mas de cinco.
+  const conTope = buscarOportunidades(p, lineasHolgadas(), tabla(), {
     objetivo: 'rendimiento',
-    pisoHoras: 60,
+    topeOrdenes: 5,
   });
-  const r = conPiso.evaluacionPropuesta.lineas.get('ITW-1');
-  assert.ok(r.corridas.length > 0, 'con piso, ITW-1 no se queda sin trabajo');
-  assert.ok(r.horasRequeridas >= 60, `ITW-1 quedo en ${r.horasRequeridas} h, debajo del piso`);
+  const r = conTope.evaluacionPropuesta.lineas.get('ITW-1');
+  assert.ok(r.corridas.length >= 3, `ITW-1 quedo con ${r.corridas.length} de 8, solto mas de 5`);
 });
 
-test('una linea que ya venia debajo del piso no se vacia mas', () => {
-  // El piso no fabrica trabajo: si la linea arranca con menos, lo que hace
-  // es impedir que le quiten lo poco que tiene.
-  const p = programa([1, 2].map((n) => orden(`A${n}`, 14.7, 6000, 'ITW-1', { secuencia: n })));
+test('el tope se mide contra el schedule ORIGINAL, no contra la vuelta anterior', () => {
+  // Si se midiera contra el paso anterior, la busqueda se alejaria de a
+  // cinco rollos por vuelta y el tope no valdria nada.
+  const p = ochoEnItw1();
   const propuesta = buscarOportunidades(p, lineasHolgadas(), tabla(), {
     objetivo: 'rendimiento',
-    pisoHoras: 60,
+    topeOrdenes: 2,
   });
-  assert.equal(propuesta.evaluacionPropuesta.lineas.get('ITW-1').corridas.length, 2);
+  for (const [clave, r] of propuesta.evaluacionPropuesta.lineas) {
+    const antes = propuesta.evaluacionOriginal.lineas.get(clave);
+    assert.ok(
+      Math.abs(r.corridas.length - antes.corridas.length) <= 2,
+      `${clave} cambio ${r.corridas.length - antes.corridas.length} rollos con tope 2`,
+    );
+  }
 });
 
-test('el piso se reporta para que el programador sepa donde se freno', () => {
+test('el tope se reporta para que el programador sepa donde se freno', () => {
   const propuesta = buscarOportunidades(ochoEnItw1(), lineasHolgadas(), tabla(), {
     objetivo: 'rendimiento',
-    pisoHoras: 60,
+    topeOrdenes: 3,
   });
-  assert.deepEqual(propuesta.lineasEnElPiso(), ['ITW-1']);
+  // ITW-1 suelta tres e ITW-7 recibe tres: las dos quedan pegadas al tope.
+  assert.deepEqual(propuesta.lineasEnElTope().sort(), ['ITW-1', 'ITW-7']);
 });
 
-test('rescatar tonelada gana sobre el piso', () => {
+test('rescatar tonelada gana sobre el tope', () => {
   // Si la linea se pasa del horizonte, ese material NO SE PRODUCE. Sacarlo
-  // vale mas que dejarle trabajo a la linea, y el piso no debe estorbarlo.
+  // vale mas que respetar el tope, y el tope no debe estorbarlo.
   const cortas = [linea('ITW-1', { horasDisponibles: 40 }), linea('ITW-7', { horasDisponibles: 300 })];
   const propuesta = buscarOportunidades(ochoEnItw1(), cortas, tabla(), {
     objetivo: 'rendimiento',
-    pisoHoras: 60,
+    topeOrdenes: 1,
   });
   const kg = (ev) => [...ev.lineas.values()].reduce((t, r) => t + r.kgProducibles, 0);
   assert.ok(
     kg(propuesta.evaluacionPropuesta) > kg(propuesta.evaluacionOriginal),
-    'el piso no debe impedir rescatar tonelada que hoy se pierde',
+    'el tope no debe impedir rescatar tonelada que hoy se pierde',
   );
 });
 
@@ -264,7 +269,7 @@ test('el techo sale del programa original, no de un supuesto', () => {
 test('rendimiento nunca pierde tonelada contra el schedule original', () => {
   const propuesta = buscarOportunidades(ochoEnItw1(), lineasHolgadas(), tabla(), {
     objetivo: 'rendimiento',
-    pisoHoras: 60,
+    topeOrdenes: 5,
   });
   const kg = (ev) => [...ev.lineas.values()].reduce((t, r) => t + r.kgProducibles, 0);
   assert.ok(kg(propuesta.evaluacionPropuesta) >= kg(propuesta.evaluacionOriginal) - 1e-6);

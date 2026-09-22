@@ -38,13 +38,18 @@ export const SUPUESTOS = {
   objetivo: 'rendimiento',
 
   /**
-   * Horas minimas de trabajo que le quedan a una linea despues del reajuste.
+   * Cuantos rollos se puede apartar una linea de lo que trae el schedule.
    *
-   * Sin piso, 'rendimiento' vacia las lineas lentas: sobre el schedule del
-   * 17/09 dejaba ITW-3 con UN rollo y 2.8 h. Una linea asi esta apagada en
-   * los hechos y eso no se puede proponer. 60 h es lo que eligio Florence.
+   * Sin freno, 'rendimiento' vacia las lineas lentas: sobre el schedule del
+   * 17/09 dejaba ITW-3 con UN rollo y 2.8 h, y eso no se puede proponer.
+   *
+   * Hubo antes un piso de 60 h de trabajo por linea. Se reemplazo por esto a
+   * peticion de Florence, y la medicion le dio la razon: el rollo es la
+   * unidad en la que el programador piensa, con tope 5 el piso ya no cambiaba
+   * ni un movimiento, y ademas limita el CAMBIO -- que es lo que le cuesta
+   * defender -- en vez de limitar el resultado.
    */
-  pisoHoras: 60,
+  topeOrdenes: 5,
 };
 
 export function catalogoLineas({
@@ -100,7 +105,7 @@ export function analizar(programa, puntos, supuestos = {}) {
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
     maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
     objetivo: supuestos.objetivo ?? SUPUESTOS.objetivo,
-    pisoHoras: supuestos.pisoHoras ?? SUPUESTOS.pisoHoras,
+    topeOrdenes: supuestos.topeOrdenes ?? SUPUESTOS.topeOrdenes,
   });
 
   return { programa, lineas, tabla, evaluacion, propuesta };
