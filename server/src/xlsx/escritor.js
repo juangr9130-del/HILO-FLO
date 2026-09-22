@@ -128,6 +128,7 @@ const ESTILOS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
 <xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
 </cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
 export const ESTILO = { NORMAL: 0, TITULO: 1, ENCABEZADO: 2, TOTAL: 3, MOVIDO: 4 };

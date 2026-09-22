@@ -108,3 +108,29 @@ test('el nombre del archivo dice de que folio salio', () => {
   const p = paqueteConMovimientos();
   assert.equal(nombreArchivo(p), 'Schedule_8200_09-17-2026_FLO-2026-0001_rebalanced.xlsx');
 });
+
+test('el archivo es un zip valido con las partes que Excel pide', async () => {
+  const p = paqueteConMovimientos();
+  p.analisis.movimientos[0].aceptado = true;
+  const bytes = exportarPrograma(p);
+
+  // Firma de ZIP local y de fin de directorio central: si alguna se rompe,
+  // el archivo no abre en ningun lado y el error es de los dificiles.
+  assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'no empieza como ZIP');
+  const fin = bytes.slice(-22, -18);
+  assert.deepEqual([...fin], [0x50, 0x4b, 0x05, 0x06], 'no cierra el directorio central');
+
+  // Y las partes que Excel exige, por nombre.
+  const texto = new TextDecoder('latin1').decode(bytes);
+  for (const parte of [
+    '[Content_Types].xml',
+    '_rels/.rels',
+    'xl/workbook.xml',
+    'xl/_rels/workbook.xml.rels',
+    'xl/styles.xml',
+    'xl/worksheets/sheet1.xml',
+    'xl/worksheets/sheet2.xml',
+  ]) {
+    assert.ok(texto.includes(parte), `falta ${parte}`);
+  }
+});
