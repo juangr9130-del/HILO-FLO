@@ -100,6 +100,39 @@ function importados(codigo) {
   return nombres;
 }
 
+/**
+ * Dos reglas de primer nivel para la misma clase.
+ *
+ * Es la version CSS del simbolo duplicado, y pega igual de feo: .barra ya era
+ * la barrita de 8 px del tablero (con height fija y overflow:hidden) cuando
+ * se reuso el nombre para una barra de controles. Los controles quedaron
+ * recortados a 8 px de alto y se veian cortados a la mitad en dos pantallas.
+ *
+ * Solo se miran las reglas pegadas al margen, que son las de las secciones.
+ * Una redefinicion dentro de @media va indentada y no cuenta, porque ahi si
+ * es a proposito.
+ */
+function revisarClasesRepetidas(css) {
+  const limpio = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const duenas = new Map();
+  const choques = [];
+  for (const m of limpio.matchAll(/^([^{}@\n][^{}\n]*)\{/gm)) {
+    for (const parte of m[1].split(',')) {
+      const clase = /^\.([a-z][\w-]*)\s*$/.exec(parte.trim());
+      if (!clase) continue;
+      const linea = limpio.slice(0, m.index).split('\n').length;
+      if (duenas.has(clase[1])) choques.push(`.${clase[1]} (lineas ${duenas.get(clase[1])} y ${linea})`);
+      else duenas.set(clase[1], linea);
+    }
+  }
+  if (choques.length) {
+    throw new Error(
+      'clases de CSS con dos reglas propias:\n  - ' + choques.join('\n  - ') +
+      '\nUna pisa a la otra. Renombra la nueva o junta las dos reglas.',
+    );
+  }
+}
+
 /** Todo lo que se importa tiene que quedar declarado en el paquete. */
 function revisarFaltantes(pedidos, declarados) {
   const faltan = [...new Set([...pedidos].filter((n) => !declarados.has(n)))];
@@ -132,6 +165,7 @@ const interfaz = [...comun, await readFile(join(WEB, 'demo', 'interfaz.js'), 'ut
 const declarados = new Map();
 const simbolos = revisarDuplicados([...porArchivo, ['web/demo/interfaz.js', interfaz]], declarados);
 revisarFaltantes(pedidos, declarados);
+revisarClasesRepetidas(estilos);
 
 const motor = porArchivo
   .map(([ruta, codigo]) => `// ===== ${ruta} ${'='.repeat(Math.max(0, 62 - ruta.length))}\n\n${codigo}`)

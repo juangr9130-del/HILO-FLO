@@ -416,17 +416,20 @@ button.deshacer {
 
 /* ---------- Hoja de corridas ---------- */
 
-/* Barra de la pestaña: vista y filtro de línea. */
-.barra {
+/* Barra de controles de una pestaña: vista, filtros, acciones.
+   NO se llama .barra: ese nombre ya lo usa la barrita de 8 px del tablero,
+   que trae overflow:hidden y height fija. Reusarlo recortaba estos
+   controles a 8 px de alto y se veian cortados a la mitad. */
+.controles {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
-.barra .relleno { flex: 1; }
-.barra .rotulo { font-size: 13px; color: var(--texto-tenue); }
-.barra select {
+.controles .relleno { flex: 1; }
+.controles .rotulo { font-size: 13px; color: var(--texto-tenue); }
+.controles select {
   font: inherit;
   font-size: 13px;
   padding: 6px 10px;
@@ -578,7 +581,7 @@ table.rollos td.notas {
   </section>
 
   <section id="panel-corridas" hidden>
-    <div class="barra">
+    <div class="controles">
       <span class="rotulo">View</span>
       <button class="secundario" id="corridas-actual" aria-pressed="true">Current program</button>
       <button class="secundario" id="corridas-propuesto" aria-pressed="false">Rebalanced</button>
@@ -4730,7 +4733,7 @@ function montarHistorial(api) {
     }
 
     caja.innerHTML = `
-      <div class="barra">
+      <div class="controles">
         <h3 style="font-size:15px;color:var(--azul);margin:0">Previous programs</h3>
         <span class="relleno"></span>
         <button class="borrar" data-borrar-todo>Delete all ${lista.length}</button>

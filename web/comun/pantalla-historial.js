@@ -28,7 +28,7 @@ function montarHistorial(api) {
     }
 
     caja.innerHTML = `
-      <div class="barra">
+      <div class="controles">
         <h3 style="font-size:15px;color:var(--azul);margin:0">Previous programs</h3>
         <span class="relleno"></span>
         <button class="borrar" data-borrar-todo>Delete all ${lista.length}</button>
