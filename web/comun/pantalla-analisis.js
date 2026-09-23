@@ -271,6 +271,57 @@ function montarAnalisis(api = {}) {
    */
   let anclas = new Map();
 
+  /**
+   * El acomodo que el programador armó a mano, por línea.
+   *
+   *   linea -> [corridas en su orden]
+   *
+   * Arrastrar o partir NO toca el análisis: el análisis decide a qué línea va
+   * cada rollo, esto decide en qué orden los corre esa línea. Son decisiones
+   * distintas y de personas distintas.
+   *
+   * Vive en el navegador junto a la marca del rollo en curso, y por la misma
+   * razón: es acomodo de piso, no el registro de lo que se analizó.
+   */
+  let secuencias = new Map();
+
+  function llaveSecuencias() {
+    return `hiloflo.orden.${paquete?.folio ?? ''}`;
+  }
+
+  /**
+   * Las corridas de una línea en el orden vigente, ya con su reloj.
+   *
+   * Sin acomodo propio es el del análisis tal cual. Con acomodo propio se
+   * recalcula, porque cambiar el orden cambia los cambios de medida.
+   */
+  function secuenciaDe(l) {
+    const mia = secuencias.get(l.linea);
+    if (!mia) return { corridas: l.secuencia, cierreH: l.cierreH, propia: false };
+    const r = evaluarSecuencia(mia, paquete.supuestos ?? {});
+    return { ...r, propia: true };
+  }
+
+  function guardarSecuencias() {
+    try {
+      const plano = {};
+      for (const [linea, sec] of secuencias) plano[linea] = sec;
+      localStorage.setItem(llaveSecuencias(), JSON.stringify(plano));
+    } catch {
+      // Sin localStorage el acomodo dura lo que la pestaña, y ya.
+    }
+  }
+
+  function cargarSecuencias() {
+    secuencias = new Map();
+    try {
+      const g = JSON.parse(localStorage.getItem(llaveSecuencias()) ?? '{}');
+      for (const [linea, sec] of Object.entries(g)) secuencias.set(linea, sec);
+    } catch {
+      /* igual que arriba */
+    }
+  }
+
   function llaveAnclas() {
     return `hiloflo.corriendo.${paquete?.folio ?? ''}`;
   }
@@ -381,6 +432,78 @@ function montarAnalisis(api = {}) {
       caja.addEventListener('click', (ev) => {
         if (ev.target.closest('label.corre')) ev.stopPropagation();
       });
+
+      // Los dos botones del consejo de acomodo.
+      caja.addEventListener('click', (ev) => {
+        const sugerir = ev.target.closest('button[data-orden-sugerir]');
+        if (sugerir) {
+          const linea = sugerir.dataset.ordenSugerir;
+          const l = (hojaActiva() ?? []).find((x) => x.linea === linea);
+          if (l) fijarSecuencia(linea, ordenSugerido(secuenciaDe(l).corridas));
+          return;
+        }
+        const reset = ev.target.closest('button[data-orden-reset]');
+        if (reset) {
+          secuencias.delete(reset.dataset.ordenReset);
+          guardarSecuencias();
+          pintarHojaCorridas();
+        }
+      });
+
+      // Arrastrar una corrida a otro lugar de su línea.
+      let arrastrando = null;
+      caja.addEventListener('dragstart', (ev) => {
+        const fila = ev.target.closest('tr.corrida');
+        if (!fila) return;
+        arrastrando = { linea: fila.closest('tbody').dataset.linea, desde: Number(fila.dataset.indice) };
+        fila.classList.add('arrastrando');
+        // Sin esto Firefox no arranca el arrastre.
+        ev.dataTransfer.setData('text/plain', fila.dataset.corrida);
+        ev.dataTransfer.effectAllowed = 'move';
+      });
+      caja.addEventListener('dragend', (ev) => {
+        ev.target.closest('tr.corrida')?.classList.remove('arrastrando');
+        caja.querySelectorAll('tr.encima').forEach((f) => f.classList.remove('encima'));
+      });
+      caja.addEventListener('dragover', (ev) => {
+        const fila = ev.target.closest('tr.corrida');
+        if (!fila || !arrastrando) return;
+        // Sólo dentro de la misma línea: mover una corrida a OTRA línea es
+        // una decisión del análisis, no del acomodo, y se hace allá.
+        if (fila.closest('tbody').dataset.linea !== arrastrando.linea) return;
+        ev.preventDefault();
+        caja.querySelectorAll('tr.encima').forEach((f) => f.classList.remove('encima'));
+        fila.classList.add('encima');
+      });
+      caja.addEventListener('drop', (ev) => {
+        const fila = ev.target.closest('tr.corrida');
+        if (!fila || !arrastrando) return;
+        if (fila.closest('tbody').dataset.linea !== arrastrando.linea) return;
+        ev.preventDefault();
+        const l = (hojaActiva() ?? []).find((x) => x.linea === arrastrando.linea);
+        if (l) {
+          fijarSecuencia(
+            arrastrando.linea,
+            moverCorrida(secuenciaDe(l).corridas, arrastrando.desde, Number(fila.dataset.indice)),
+          );
+        }
+        arrastrando = null;
+      });
+
+      // Doble clic en el asa: partir la corrida por la mitad.
+      caja.addEventListener('dblclick', (ev) => {
+        const asa = ev.target.closest('td.asa');
+        if (!asa) return;
+        ev.stopPropagation();
+        const fila = asa.closest('tr.corrida');
+        const linea = fila.closest('tbody').dataset.linea;
+        const l = (hojaActiva() ?? []).find((x) => x.linea === linea);
+        if (!l) return;
+        const corridas = secuenciaDe(l).corridas;
+        const c = corridas[Number(fila.dataset.indice)];
+        if (!c || c.detalle.length < 2) return;
+        fijarSecuencia(linea, partirCorrida(corridas, c.n, Math.floor(c.detalle.length / 2)));
+      });
     }
     const hoja = hojaActiva();
 
@@ -418,36 +541,39 @@ function montarAnalisis(api = {}) {
   }
 
   function tarjetaLinea(l) {
-    const sobregiro = l.cierreH > l.horasDisponibles + 1e-6;
+    const { corridas, cierreH, propia } = secuenciaDe(l);
+    const sobregiro = cierreH > l.horasDisponibles + 1e-6;
     const a = anclas.get(l.linea);
     // Con un rollo marcado, lo que importa ya no es cuánto dura la línea sino
     // a qué hora acaba contando desde ahora. Eso es lo que se pone al frente.
     const cierre = a
-      ? `now → ${relojDe(l.linea, l.cierreH)} · ${num(Math.max(0, l.cierreH - a.desdeH), 1)} h to go`
-      : `${reloj(0)} → ${reloj(l.cierreH)} · ${num(l.horas, 1)} h`;
+      ? `now → ${relojDe(l.linea, cierreH)} · ${num(Math.max(0, cierreH - a.desdeH), 1)} h to go`
+      : `${reloj(0)} → ${reloj(cierreH)} · ${num(cierreH, 1)} h`;
+    const delta = propia ? l.cierreH - cierreH : 0;
     return `<div class="tarjeta">
       <h2>${l.linea}
-        <small>${l.workCenter} · ${l.corridas} runs · ${num(l.rollos)} coils · ${num(l.kg / 1000, 1)} t</small>
+        <small>${l.workCenter} · ${corridas.length} runs · ${num(l.rollos)} coils · ${num(l.kg / 1000, 1)} t</small>
         <span class="cierre${sobregiro ? ' sobregiro' : ''}${a ? ' anclado' : ''}">
           ${cierre}
-          ${sobregiro && !a ? `· ${num(l.cierreH - l.horasDisponibles, 1)} h past the ${num(l.horasDisponibles)} h horizon` : ''}
+          ${sobregiro && !a ? `· ${num(cierreH - l.horasDisponibles, 1)} h past the ${num(l.horasDisponibles)} h horizon` : ''}
         </span>
       </h2>
+      ${pintarConsejoOrden(l, corridas, propia, delta)}
       <div class="cuerpo" style="padding:0"><div class="scroll">
         <table class="hoja">
           <thead><tr>
-            <th>#</th><th>Part</th><th>Description</th><th class="n">Ø mm</th>
+            <th></th><th>#</th><th>Part</th><th>Description</th><th class="n">Ø mm</th>
             <th class="n">Coils</th><th class="n">Tons</th><th class="n">kg/h</th>
             <th class="n" title="Coil changes plus the size changeover, if the diameter changes">Change</th>
             <th>Start</th><th>End</th><th class="n">Hours</th>
           </tr></thead>
-          <tbody>${l.secuencia.map((c) => renglonCorrida(l, c)).join('')}</tbody>
+          <tbody data-linea="${l.linea}">${corridas.map((c, i) => renglonCorrida(l, c, i)).join('')}</tbody>
         </table>
       </div></div>
     </div>`;
   }
 
-  function renglonCorrida(l, c) {
+  function renglonCorrida(l, c, indice) {
     const clave = `${l.linea}#${c.n}`;
     const abierta = corridasAbiertas.has(clave);
     const fuera = !c.dentroDelHorizonte;
@@ -462,7 +588,8 @@ function montarAnalisis(api = {}) {
       fuera && !c.sinReceta ? '<span class="marca mala">past horizon</span>' : '',
     ].join('');
 
-    return `<tr class="${clases}" data-corrida="${clave}">
+    return `<tr class="${clases}" data-corrida="${clave}" data-indice="${indice}" draggable="true">
+        <td class="asa" title="Drag to reorder · double-click to split">⠿</td>
         <td class="n">${c.n}</td>
         <td><b>${c.parte}</b></td>
         <td class="desc">${c.descripcion}${marcas}</td>
@@ -476,8 +603,59 @@ function montarAnalisis(api = {}) {
         <td class="n">${num(c.horasProduccion + c.horasCambio, 1)}</td>
       </tr>
       <tr class="rollos" data-de="${clave}"${abierta ? '' : ' hidden'}>
-        <td colspan="11">${tablaRollos(l, c)}</td>
+        <td colspan="12">${tablaRollos(l, c)}</td>
       </tr>`;
+  }
+
+  /**
+   * El consejo de acomodo para una línea.
+   *
+   * Es CONSEJO y no se aplica solo. El orden puede responder a un compromiso
+   * con el cliente, a material que aún no llega o a algo que el módulo no ve;
+   * quien decide es el programador. Por eso hay un botón, no un cambio.
+   */
+  function pintarConsejoOrden(l, corridas, propia, delta) {
+    const c = consejoDeOrden(corridas, paquete.supuestos ?? {});
+    const rehacer = propia
+      ? `<button class="secundario" data-orden-reset="${l.linea}">Back to the analysis order</button>`
+      : '';
+    const cambiado = propia
+      ? `<span class="rotulo">Your order · ${
+          delta > 0.01
+            ? `<b class="gana">${num(delta, 1)} h less</b>`
+            : delta < -0.01
+              ? `<b class="pierde">${num(-delta, 1)} h more</b>`
+              : 'same hours'
+        } than the analysis order</span>`
+      : '';
+
+    if (!c) {
+      return cambiado || rehacer
+        ? `<div class="consejo-orden"><div class="controles">${cambiado}<span class="relleno"></span>${rehacer}</div></div>`
+        : '';
+    }
+
+    return `<div class="consejo-orden">
+      <div class="controles">
+        <span class="rotulo">
+          <b>Grouping the sizes would save ${c.evitables}
+          ${c.evitables === 1 ? 'size change' : 'size changes'} (${num(c.horas, 1)} h).</b>
+          Runs ${c.saltos.length ? c.saltos.join(', ') : '—'} break the progression:
+          the line steps up in size, then back down.
+        </span>
+        <span class="relleno"></span>
+        ${cambiado}
+        <button class="secundario" data-orden-sugerir="${l.linea}">Apply this order</button>
+        ${rehacer}
+      </div>
+    </div>`;
+  }
+
+  /** Guardar un acomodo nuevo para una línea y repintar. */
+  function fijarSecuencia(linea, corridas) {
+    secuencias.set(linea, corridas);
+    guardarSecuencias();
+    pintarHojaCorridas();
   }
 
   function tablaRollos(l, c) {
@@ -991,6 +1169,7 @@ function montarAnalisis(api = {}) {
       corridasAbiertas.clear();
       lineaCorridas = '';
       cargarAnclas();
+      cargarSecuencias();
       pintarHojaCorridas();
       if (api.obtenerMatriz) pintarMatrizRendimiento(await api.obtenerMatriz(paquete));
     },

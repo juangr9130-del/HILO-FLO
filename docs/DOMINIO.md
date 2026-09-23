@@ -184,6 +184,44 @@ la regla *Respect the floor's diameter ranges*.
 **ITW-15 no tiene rango** porque no está instalada y piso no le dio uno. Una
 línea sin rango no se frena: no se le inventa uno.
 
+### El acomodo dentro de una línea: arrastrar, partir y el consejo
+
+El análisis decide **a qué línea** va cada rollo. El acomodo decide **en qué
+orden los corre esa línea**. Son decisiones distintas, así que se tocan en
+lugares distintos: el análisis propone movimientos entre líneas, y la hoja de
+corridas deja reacomodar dentro de una.
+
+- **Arrastrar** una corrida a otro lugar de su línea (nunca a otra: eso es
+  decisión del análisis).
+- **Doble clic en el asa** para partirla en dos. Las dos mitades quedan
+  pegadas, así que por sí solo no cambia nada; sirve para después arrastrar
+  una de ellas.
+- Cada cambio **recalcula el reloj y los cambios de medida**, y el encabezado
+  dice si el acomodo propio gana o pierde horas contra el del análisis.
+- **Back to the analysis order** deshace todo lo de esa línea.
+
+**El consejo.** Agrupar los diámetros deja el mínimo posible de cambios de
+medida: **(diámetros distintos − 1)**, porque cualquier acomodo tiene que
+visitar cada diámetro y cada salto entre dos distintos cuesta un cambio. El
+módulo compara el orden actual contra ese mínimo y avisa cuánto se ganaría,
+señalando las corridas que rompen la progresión —donde la línea sube de medida
+y luego regresa.
+
+Sobre el schedule del 17/09 son **15 cambios de medida evitables = 7.5 h =
+6.4 t**, y **sin mover un solo rollo de línea**. ITW-1 es el ejemplo: hoy corre
+14.70, 14.80, 14.50, **15.09**, 14.90, 14.70, 14.60 — ese 15.09 en medio obliga
+a subir y bajar. Agrupado quedaría 14.50, 14.60, 14.70, 14.70, 14.80, 14.90,
+15.09, con los dos bloques de 14703 juntos.
+
+**Es consejo y no se aplica solo.** El orden puede responder a un compromiso
+con el cliente, a material que aún no llega o a algo que el módulo no ve. Hay
+un botón, no un cambio automático.
+
+La aritmética de resecuenciar vive en `web/comun/secuencia.js`, repetida ahí
+porque el módulo instalado no carga el motor y tiene que recalcular el reloj en
+cada arrastre. Una prueba compara las dos contra las mismas corridas: si
+alguien cambia una, truena.
+
 ### El rollo que va corriendo
 
 La hoja de corridas trae una casilla por rollo. Al marcar el que una línea

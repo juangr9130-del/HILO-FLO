@@ -159,7 +159,7 @@ for (const ruta of FUENTES) {
 const estilos = await readFile(join(WEB, 'estilos.css'), 'utf8');
 const plantilla = await readFile(join(WEB, 'demo', 'plantilla.html'), 'utf8');
 const comun = await Promise.all(
-  ['pantalla-analisis.js', 'pantalla-catalogo.js', 'pantalla-historial.js', 'pantalla-reglas.js'].map((f) => readFile(join(WEB, 'comun', f), 'utf8')),
+  ['secuencia.js', 'pantalla-analisis.js', 'pantalla-catalogo.js', 'pantalla-historial.js', 'pantalla-reglas.js'].map((f) => readFile(join(WEB, 'comun', f), 'utf8')),
 );
 const interfaz = [...comun, await readFile(join(WEB, 'demo', 'interfaz.js'), 'utf8')].join('\n\n');
 
