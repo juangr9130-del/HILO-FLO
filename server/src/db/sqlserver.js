@@ -422,6 +422,46 @@ export class RepositorioSql {
     return { clave, valor };
   }
 
+  // --- rango de diametros por linea ---
+
+  async leerRangos() {
+    const r = await this.pool.request().query(
+      `SELECT l.codigo AS linea, g.diametro_min, g.diametro_max
+         FROM flo_rango g JOIN cat_linea l ON l.linea_id = g.linea_id`,
+    );
+    return new Map(r.recordset.map((f) => [f.linea, [Number(f.diametro_min), Number(f.diametro_max)]]));
+  }
+
+  async guardarRango(linea, [min, max], empleado = null) {
+    const id = (await this.lineaId()).get(linea);
+    if (!id) return null;
+    await this.pool
+      .request()
+      .input('id', sql.SmallInt, id)
+      .input('min', sql.Decimal(6, 2), min)
+      .input('max', sql.Decimal(6, 2), max)
+      .input('por', sql.NVarChar(20), empleado)
+      .query(
+        `MERGE flo_rango AS d
+         USING (SELECT @id AS linea_id) AS o ON d.linea_id = o.linea_id
+         WHEN MATCHED THEN UPDATE SET diametro_min = @min, diametro_max = @max,
+                                      cambiado_en = SYSUTCDATETIME(), cambiado_por = @por
+         WHEN NOT MATCHED THEN INSERT (linea_id, diametro_min, diametro_max, cambiado_por)
+                               VALUES (@id, @min, @max, @por);`,
+      );
+    return { linea, rango: [min, max] };
+  }
+
+  async quitarRango(linea) {
+    const id = (await this.lineaId()).get(linea);
+    if (!id) return null;
+    const r = await this.pool
+      .request()
+      .input('id', sql.SmallInt, id)
+      .query('DELETE FROM flo_rango OUTPUT DELETED.linea_id WHERE linea_id = @id');
+    return r.recordset[0] ? { linea } : null;
+  }
+
   async quitarRegla(clave) {
     const r = await this.pool
       .request()

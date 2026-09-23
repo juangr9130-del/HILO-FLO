@@ -16,8 +16,11 @@ function montarReglas(api = {}) {
   let reglas = [];
   let sucio = false;
 
+  let rangos = [];
+
   async function refrescar() {
     reglas = await api.datos();
+    rangos = (await api.rangos?.()) ?? [];
     pintar();
   }
 
@@ -32,7 +35,89 @@ function montarReglas(api = {}) {
     caja.querySelectorAll('button[data-restablecer]').forEach((b) => {
       b.addEventListener('click', () => restablecer(b.dataset.restablecer));
     });
+    pintarRangos();
     pintarPie();
+  }
+
+  /**
+   * Los rangos de diámetro que piso dio para cada línea.
+   *
+   * Va aquí y no en la pantalla de velocidades porque son cosas distintas: la
+   * velocidad dice qué tan rápido corre un diámetro, el rango dice en cuáles
+   * la línea corre BIEN. Una línea puede tener velocidad tabulada para un
+   * diámetro y aun así no ser buena para él.
+   */
+  function pintarRangos() {
+    const caja = $('rangos');
+    if (!caja) return;
+    if (!rangos.length) {
+      caja.innerHTML = '';
+      return;
+    }
+    const respeta = reglas.find((r) => r.clave === 'respetarRangos')?.valor;
+    caja.innerHTML = `
+      <div class="tarjeta${respeta ? '' : ' apagada'}">
+        <h2>Diameter range per line <small>what the floor says each line runs well</small></h2>
+        <div class="cuerpo" style="padding:0"><div class="scroll">
+          <table>
+            <thead><tr>
+              <th>Line</th><th class="n">From (mm)</th><th class="n">To (mm)</th><th></th>
+            </tr></thead>
+            <tbody>${rangos.map(renglonRango).join('')}</tbody>
+          </table>
+        </div></div>
+        <p class="nota-tabla">${
+          respeta
+            ? 'No coil is moved to a line outside its range. What is already scheduled outside one is reported, not moved.'
+            : 'These ranges are <b>not being applied</b> — turn on the rule above to use them.'
+        }</p>
+      </div>`;
+
+    for (const e of caja.querySelectorAll('input[data-rango]')) {
+      e.addEventListener('change', () => cambiarRango(e.dataset.rango));
+    }
+    caja.querySelectorAll('button[data-quitar-rango]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        await api.quitarRango(b.dataset.quitarRango);
+        sucio = true;
+        await refrescar();
+        api.alCambiar?.();
+      });
+    });
+  }
+
+  function renglonRango(r) {
+    return `<tr${r.cambiado ? ' class="cambiado"' : ''}>
+      <td>${r.linea}</td>
+      <td class="n"><input type="number" step="0.01" min="0" max="40"
+            data-rango="${r.linea}" data-lado="min" value="${r.min}"></td>
+      <td class="n"><input type="number" step="0.01" min="0" max="40"
+            data-rango="${r.linea}" data-lado="max" value="${r.max}"></td>
+      <td style="text-align:right">${
+        r.cambiado
+          ? `<button class="borrar" data-quitar-rango="${r.linea}" title="Back to ${r.minSemilla}–${r.maxSemilla} mm">Reset</button>`
+          : ''
+      }</td>
+    </tr>`;
+  }
+
+  async function cambiarRango(linea) {
+    const caja = $('rangos');
+    const lo = Number(caja.querySelector(`input[data-rango="${linea}"][data-lado="min"]`).value);
+    const hi = Number(caja.querySelector(`input[data-rango="${linea}"][data-lado="max"]`).value);
+    const r = await api.guardarRango(linea, [lo, hi]);
+    if (r && r.ok === false) {
+      // El servicio es el que manda: si rechaza, se vuelve a pintar con lo
+      // que de verdad quedó guardado en vez de dejar el número a medias.
+      const e = $('error-respetarRangos');
+      if (e) {
+        e.textContent = (await r.json().catch(() => ({}))).error ?? 'The range was not saved.';
+        e.hidden = false;
+      }
+    }
+    sucio = true;
+    await refrescar();
+    api.alCambiar?.();
   }
 
   function campo(r) {

@@ -8,6 +8,7 @@ import { TablaVelocidades } from '../motor/rendimiento.js';
 import { evaluarPrograma } from '../motor/programa.js';
 import { buscarOportunidades } from '../motor/optimizador.js';
 import { reunirAvisos } from './avisos.js';
+import { dentroDelRango, rangosVigentes } from '../catalogo/rangos.js';
 import { hojaDeCorridas, inicioDelPrograma } from './corridas.js';
 import { ErrorDeDatos } from '../errores.js';
 import { redondear } from '../util/numeros.js';
@@ -61,6 +62,15 @@ export const SUPUESTOS = {
   topeOrdenes: 5,
 
   /**
+   * Respetar el rango de diametros que piso dice que cada linea corre bien.
+   *
+   * Los rangos viven en catalogo/rangos.js y son mas estrechos que la tabla
+   * de velocidades. Frenan A DONDE se mueve material; lo que ya esta
+   * programado fuera de rango se avisa y se deja.
+   */
+  respetarRangos: true,
+
+  /**
    * ITW-15 todavia no esta instalada, asi que queda fuera del reparto.
    *
    * Se usaba desde catalogoLineas() pero no estaba declarado aqui, asi que la
@@ -112,7 +122,12 @@ export function analizar(programa, puntos, supuestos = {}) {
   }
 
   const evaluacion = evaluarPrograma(programa, lineas, tabla);
+  const rangos = rangosVigentes(supuestos.rangos);
+  const respetar = supuestos.respetarRangos ?? SUPUESTOS.respetarRangos;
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
+    permiteDestino: respetar
+      ? (destino, orden) => dentroDelRango(rangos, destino, orden.diametroMm)
+      : null,
     maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
     objetivo: supuestos.objetivo ?? SUPUESTOS.objetivo,
     topeOrdenes: supuestos.topeOrdenes ?? SUPUESTOS.topeOrdenes,
@@ -206,7 +221,19 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
       toneladasGanadas:
         objetivo === 'rendimiento' ? prod.toneladasPorTiempo : redondear(propuesta.toneladasPorBalanceo, 1),
       objetivo,
-      avisos: reunirAvisos(programa, lineas, tabla, evaluacion, propuesta),
+      avisos: reunirAvisos(
+        programa,
+        lineas,
+        tabla,
+        evaluacion,
+        propuesta,
+        // Los rangos se recalculan aqui y no se arrastran desde analizar():
+        // empaquetar() se llama tambien al reabrir un folio, con los
+        // supuestos que ese folio guardo.
+        (supuestos.respetarRangos ?? SUPUESTOS.respetarRangos)
+          ? rangosVigentes(supuestos.rangos)
+          : null,
+      ),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
         linea: o.linea,

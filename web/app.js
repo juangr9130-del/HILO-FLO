@@ -86,6 +86,14 @@ const reglas = montarReglas({
       body: JSON.stringify({ valor }),
     }),
   quitar: (clave) => fetch(`/api/reglas/${encodeURIComponent(clave)}`, { method: 'DELETE' }),
+  rangos: () => fetch('/api/rangos').then((r) => r.json()),
+  guardarRango: (linea, [min, max]) =>
+    fetch(`/api/rangos/${encodeURIComponent(linea)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ min, max }),
+    }),
+  quitarRango: (linea) => fetch(`/api/rangos/${encodeURIComponent(linea)}`, { method: 'DELETE' }),
   alCambiar: () => marcarProgramaDesactualizado(),
   hayPrograma: () => Boolean(paquete),
   reanalizar: async () => {

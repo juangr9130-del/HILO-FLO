@@ -547,6 +547,16 @@ table.rollos tr.hecha td.notas { color: #c2c9d1; }
 /* El cierre de una línea anclada es un pronóstico, no el plan: se distingue. */
 .tarjeta > h2 .cierre.anclado { color: var(--verde); font-weight: 600; }
 
+/* Rangos de diámetro: la tabla se apaga cuando la regla no está prendida,
+   para que no parezca que se está aplicando algo que no. */
+.tarjeta.apagada { opacity: 0.55; }
+.tarjeta.apagada input { background: #f4f6f8; }
+#rangos input[type='number'] {
+  width: 84px; font: inherit; font-family: 'Barlow Condensed', sans-serif; font-size: 15px;
+  padding: 3px 7px; border: 1px solid var(--borde); border-radius: 5px; text-align: right;
+}
+#rangos tr.cambiado td:first-child { box-shadow: inset 3px 0 0 var(--naranja); font-weight: 600; }
+
 
 /* Sólo del demo: el banner que aclara que esto no es el módulo instalado. */
 .banner-demo {
@@ -690,6 +700,7 @@ table.rollos tr.hecha td.notas { color: #c2c9d1; }
       nothing is fixed in the code.
     </div>
     <div id="reglas"></div>
+    <div id="rangos"></div>
     <div id="pie-reglas"></div>
   </section>
 
@@ -1656,11 +1667,25 @@ class Propuesta {
  * entradas, que no cuesta nada.
  */
 class Estado {
-  constructor(programa, lineas, tabla, { objetivo = 'calendario', limites = new Limites() } = {}) {
+  constructor(
+    programa,
+    lineas,
+    tabla,
+    { objetivo = 'calendario', limites = new Limites(), permiteDestino = null } = {},
+  ) {
     this.lineas = new Map(lineas.map((l) => [l.clave, l]));
     this.tabla = tabla;
     this.objetivo = objetivo;
     this.limites = limites;
+    /**
+     * Filtro extra sobre el destino de un movimiento, o null.
+     *
+     * Hoy lo usa el rango de diametros que piso dice que cada linea corre
+     * bien. Va aparte de la tabla de velocidades a proposito: la tabla dice
+     * que PUEDE correr la linea y esto en que corre BIEN; mezclarlos haria
+     * que corregir una velocidad cambiara sin querer lo que se permite.
+     */
+    this.permiteDestino = permiteDestino;
     this.asignacion = new Map(lineas.map((l) => [l.clave, programa.deLinea(l.clave)]));
     // Cuantas ordenes traia cada linea: el tope se mide contra ESTO y no
     // contra la vuelta anterior, si no la busqueda se aleja de a poquito.
@@ -1819,6 +1844,7 @@ function buscarOportunidades(
     umbralHoras = UMBRAL_HORAS,
     objetivo = 'calendario',
     topeOrdenes = Infinity,
+    permiteDestino = null,
   } = {},
 ) {
   const evaluacionInicial = evaluarPrograma(programa, lineas, tabla);
@@ -1829,7 +1855,7 @@ function buscarOportunidades(
     objetivo === 'rendimiento'
       ? new Limites({ techo: evaluacionInicial.makespan, topeOrdenes })
       : new Limites();
-  const estado = new Estado(programa, lineas, tabla, { objetivo, limites });
+  const estado = new Estado(programa, lineas, tabla, { objetivo, limites, permiteDestino });
   const destinosValidos = new Set(lineas.filter((l) => l.activa).map((l) => l.clave));
 
   for (let i = 0; i < maxMovimientos; i++) {
@@ -1862,6 +1888,7 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
     if (bloque.length < 2) continue; // de una sola se encarga la jugada 2
     for (const destino of estado.tabla.lineasPara(bloque[0])) {
       if (destino === bloque[0].linea || !destinosValidos.has(destino)) continue;
+      if (estado.permiteDestino && !estado.permiteDestino(destino, bloque[0])) continue;
       const [[puntaje, , , dentro], cambios] = estado.deltaMoverBloque(bloque, destino);
       if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
@@ -1874,6 +1901,7 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
   for (const orden of movibles) {
     for (const destino of estado.tabla.lineasPara(orden)) {
       if (destino === orden.linea || !destinosValidos.has(destino)) continue;
+      if (estado.permiteDestino && !estado.permiteDestino(destino, orden)) continue;
       const [[puntaje, , , dentro], cambios] = estado.deltaMover(orden, destino);
       if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
@@ -1894,6 +1922,10 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
           if (a.diametroMm === b.diametroMm) continue; // permutar iguales no cambia nada
           if (!estado.tabla.puedeCorrer(b.linea, a)) continue;
           if (!estado.tabla.puedeCorrer(a.linea, b)) continue;
+          // Una permuta manda material en los dos sentidos: las dos patas
+          // tienen que caer en el rango de su linea nueva.
+          if (estado.permiteDestino && !estado.permiteDestino(b.linea, a)) continue;
+          if (estado.permiteDestino && !estado.permiteDestino(a.linea, b)) continue;
           const [[puntaje, , , dentro], cambios] = estado.deltaPermutar(a, b);
           if (puntaje > mejorPuntaje && dentro) {
             mejorPuntaje = puntaje;
@@ -2587,6 +2619,95 @@ let _claves = null;
 function clavesValidas() {
   if (!_claves) _claves = new Set(semilla().map((p) => p.clave));
   return _claves;
+}
+
+// ===== src/catalogo/rangos.js ========================================
+
+/**
+ * El rango de diametros que cada linea corre MEJOR, segun piso.
+ *
+ * Ojo con la diferencia contra la tabla de velocidades, porque son dos cosas
+ * distintas y es facil confundirlas:
+ *
+ *   TABLA DE VELOCIDADES  que diametros PUEDE correr la linea. Sale del WI.
+ *   RANGO DE PISO         en cuales corre BIEN. Sale de la experiencia.
+ *
+ * El rango es mucho mas estrecho: entre 23% y 73% de los diametros tabulados
+ * caen dentro. Y sin embargo el schedule del 17/09 ya casi lo respeta -- solo
+ * 7 de 472 rollos quedan fuera, y por decimas de milimetro -- lo que dice que
+ * el programador ya sigue esta regla aunque no estuviera escrita.
+ *
+ * Por eso se usa para frenar A DONDE se mueve material, no para reprobar lo
+ * que ya esta programado: lo que ya corre fuera de rango se avisa y se deja,
+ * que sacarlo seria imponerle al programador un cambio que el no pidio.
+ */
+
+/** Lo que entrego piso, en mm. Cada linea: [minimo, maximo]. */
+const RANGOS = new Map([
+  ['ITW-1', [11.0, 15.4]],
+  ['ITW-2', [5.0, 12.0]],
+  ['ITW-3', [9.0, 13.5]],
+  ['ITW-4', [10.0, 13.5]],
+  ['ITW-5', [12.0, 15.5]],
+  ['ITW-6', [13.0, 16.0]],
+  ['ITW-7', [15.0, 18.0]],
+  ['ITW-8', [15.0, 18.0]],
+  ['ITW-9', [13.0, 16.0]],
+  ['ITW-10', [13.0, 16.0]],
+  ['ITW-11', [11.0, 14.5]],
+  ['ITW-12', [16.5, 18.5]],
+  ['ITW-13', [18.0, 22.1]],
+  ['ITW-14', [17.5, 19.5]],
+]);
+
+/** ITW-15 no esta instalada y piso no le dio rango: no se le inventa uno. */
+function rangoSemilla(linea) {
+  return RANGOS.get(linea) ?? null;
+}
+
+/** Los rangos con lo que planta haya corregido encima. */
+function rangosVigentes(ajustes = new Map()) {
+  const vigentes = new Map();
+  for (const [linea, rango] of RANGOS) {
+    const a = ajustes instanceof Map ? ajustes.get(linea) : ajustes?.[linea];
+    vigentes.set(linea, revisarRango(a) === null && a ? [Number(a[0]), Number(a[1])] : rango);
+  }
+  return vigentes;
+}
+
+/** Motivo por el que un rango no se acepta, o null. */
+function revisarRango(rango) {
+  if (!Array.isArray(rango) || rango.length !== 2) return 'the range needs a minimum and a maximum';
+  const [lo, hi] = rango.map(Number);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return 'both have to be numbers';
+  if (lo <= 0 || hi <= 0) return 'both have to be greater than zero';
+  if (lo >= hi) return 'the minimum has to be below the maximum';
+  if (hi > 40) return 'that is out of range (40 mm max)';
+  return null;
+}
+
+/** ¿Esa linea corre bien ese diametro? Sin rango, no se estorba. */
+function dentroDelRango(vigentes, linea, diametroMm) {
+  const r = vigentes.get(linea);
+  if (!r) return true;
+  return diametroMm >= r[0] - 1e-9 && diametroMm <= r[1] + 1e-9;
+}
+
+/** Lo que pinta la pantalla: cada linea con su rango y si se corrigio. */
+function rangosParaPantalla(ajustes = new Map()) {
+  const vigentes = rangosVigentes(ajustes);
+  return [...RANGOS.keys()].map((linea) => {
+    const semilla = RANGOS.get(linea);
+    const v = vigentes.get(linea);
+    return {
+      linea,
+      min: v[0],
+      max: v[1],
+      minSemilla: semilla[0],
+      maxSemilla: semilla[1],
+      cambiado: v[0] !== semilla[0] || v[1] !== semilla[1],
+    };
+  });
 }
 
 // ===== src/ingesta/comun.js ==========================================
@@ -3455,12 +3576,56 @@ function avisoTope(propuesta) {
   };
 }
 
+/**
+ * Ordenes programadas fuera del rango que piso da para su linea.
+ *
+ * No se mueven: sacarlas seria imponerle al programador un cambio que el no
+ * pidio, y puede haber una razon detras. Se dicen, y el decide. Sobre el
+ * schedule del 17/09 son 7 de 472 rollos y por decimas de milimetro, o sea
+ * que el rango ya se respeta en la practica.
+ */
+function avisoFueraDeRango(programa, rangos) {
+  if (!rangos) return null;
+  const fuera = [];
+  for (const o of programa.ordenes) {
+    const r = rangos.get(o.linea);
+    if (!r) continue;
+    if (o.diametroMm < r[0] - 1e-9 || o.diametroMm > r[1] + 1e-9) fuera.push({ orden: o, rango: r });
+  }
+  if (!fuera.length) return null;
+
+  const porLinea = new Map();
+  for (const { orden: o, rango } of fuera) {
+    if (!porLinea.has(o.linea)) porLinea.set(o.linea, { linea: o.linea, rango, ordenes: 0, kilogramos: 0, diametros: new Set() });
+    const g = porLinea.get(o.linea);
+    g.ordenes += 1;
+    g.kilogramos += o.kilogramos;
+    g.diametros.add(o.diametroMm);
+  }
+
+  return {
+    tipo: 'fuera_de_rango',
+    severidad: 'nota',
+    ordenes: fuera.length,
+    kilogramos: fuera.reduce((t, f) => t + f.orden.kilogramos, 0),
+    lineas: [...porLinea.values()].map((g) => ({
+      linea: g.linea,
+      min: g.rango[0],
+      max: g.rango[1],
+      ordenes: g.ordenes,
+      kilogramos: g.kilogramos,
+      diametros: [...g.diametros].sort((a, b) => a - b),
+    })),
+  };
+}
+
 /** Todos los avisos aplicables, de mayor a menor severidad. */
-function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null) {
+function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null, rangos = null) {
   const orden = { error: 0, nota: 1 };
   return [
     avisoSinReceta(evaluacion),
     avisoDevanador(programa, lineas, tabla, evaluacion),
+    avisoFueraDeRango(programa, rangos),
     propuesta ? avisoTope(propuesta) : null,
   ]
     .filter(Boolean)
@@ -3617,6 +3782,7 @@ function hojaDeCorridas(evaluacion) {
 
 
 
+
 /** Las 14 lineas instaladas mas ITW-15, que esta por instalarse. */
 const LINEAS_INSTALADAS = Array.from({ length: 14 }, (_, i) => `ITW-${i + 1}`);
 const LINEA_POR_INSTALAR = 'ITW-15';
@@ -3664,6 +3830,15 @@ const SUPUESTOS = {
    * defender -- en vez de limitar el resultado.
    */
   topeOrdenes: 5,
+
+  /**
+   * Respetar el rango de diametros que piso dice que cada linea corre bien.
+   *
+   * Los rangos viven en catalogo/rangos.js y son mas estrechos que la tabla
+   * de velocidades. Frenan A DONDE se mueve material; lo que ya esta
+   * programado fuera de rango se avisa y se deja.
+   */
+  respetarRangos: true,
 
   /**
    * ITW-15 todavia no esta instalada, asi que queda fuera del reparto.
@@ -3717,7 +3892,12 @@ function analizar(programa, puntos, supuestos = {}) {
   }
 
   const evaluacion = evaluarPrograma(programa, lineas, tabla);
+  const rangos = rangosVigentes(supuestos.rangos);
+  const respetar = supuestos.respetarRangos ?? SUPUESTOS.respetarRangos;
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
+    permiteDestino: respetar
+      ? (destino, orden) => dentroDelRango(rangos, destino, orden.diametroMm)
+      : null,
     maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
     objetivo: supuestos.objetivo ?? SUPUESTOS.objetivo,
     topeOrdenes: supuestos.topeOrdenes ?? SUPUESTOS.topeOrdenes,
@@ -3811,7 +3991,19 @@ function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evalu
       toneladasGanadas:
         objetivo === 'rendimiento' ? prod.toneladasPorTiempo : redondear(propuesta.toneladasPorBalanceo, 1),
       objetivo,
-      avisos: reunirAvisos(programa, lineas, tabla, evaluacion, propuesta),
+      avisos: reunirAvisos(
+        programa,
+        lineas,
+        tabla,
+        evaluacion,
+        propuesta,
+        // Los rangos se recalculan aqui y no se arrastran desde analizar():
+        // empaquetar() se llama tambien al reabrir un folio, con los
+        // supuestos que ese folio guardo.
+        (supuestos.respetarRangos ?? SUPUESTOS.respetarRangos)
+          ? rangosVigentes(supuestos.rangos)
+          : null,
+      ),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
         linea: o.linea,
@@ -4282,6 +4474,15 @@ const REGLAS = [
       'it is. Lower it once there is a measured OEE and every kg/h drops accordingly.',
   },
   {
+    clave: 'respetarRangos',
+    etiqueta: "Respect the floor's diameter ranges",
+    tipo: 'bandera',
+    ayuda:
+      'The floor gave the diameter range each line runs well, and it is much narrower ' +
+      'than the speed table. With this on, no coil is moved to a line outside its ' +
+      'range. What is already scheduled outside one is reported, not moved.',
+  },
+  {
     clave: 'itw15Activa',
     etiqueta: 'ITW-15 is installed',
     tipo: 'bandera',
@@ -4526,6 +4727,7 @@ function montarAnalisis(api = {}) {
     const pintores = {
       devanador_no_indicado: pintarAvisoDevanador,
       tope_alcanzado: pintarAvisoTope,
+      fuera_de_rango: pintarAvisoFueraDeRango,
     };
     $('avisos').innerHTML = desactualizado + avisos
       .map((av) => (pintores[av.tipo] ?? pintarAvisoSinReceta)(av))
@@ -4542,6 +4744,25 @@ function montarAnalisis(api = {}) {
       ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h more</b>` : ''}.
       <div style="margin-top:5px;color:var(--texto-tenue)">
         ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} orders, ${num(l.kilogramos)} kg`).join(' · ')}
+      </div>
+    </div>`;
+  }
+
+  function pintarAvisoFueraDeRango(av) {
+    return `<div class="aviso nota">
+      <strong>${av.ordenes} ${av.ordenes === 1 ? 'coil is' : 'coils are'}
+      (${num(av.kilogramos)} kg) on a line outside the diameter range the floor gave
+      for it.</strong>
+      They were left where you put them — moving them would be a change you did not ask
+      for, and there may be a reason. The rebalance will not send more material outside
+      these ranges.
+      <div style="margin-top:5px;color:var(--texto-tenue)">
+        ${av.lineas
+          .map(
+            (l) =>
+              `${l.linea} (runs ${num(l.min, 2)}–${num(l.max, 2)} mm): ${l.ordenes} ${l.ordenes === 1 ? 'coil' : 'coils'} at ${l.diametros.map((d) => num(d, 2)).join(', ')} mm`,
+          )
+          .join(' · ')}
       </div>
     </div>`;
   }
@@ -5705,8 +5926,11 @@ function montarReglas(api = {}) {
   let reglas = [];
   let sucio = false;
 
+  let rangos = [];
+
   async function refrescar() {
     reglas = await api.datos();
+    rangos = (await api.rangos?.()) ?? [];
     pintar();
   }
 
@@ -5721,7 +5945,89 @@ function montarReglas(api = {}) {
     caja.querySelectorAll('button[data-restablecer]').forEach((b) => {
       b.addEventListener('click', () => restablecer(b.dataset.restablecer));
     });
+    pintarRangos();
     pintarPie();
+  }
+
+  /**
+   * Los rangos de diámetro que piso dio para cada línea.
+   *
+   * Va aquí y no en la pantalla de velocidades porque son cosas distintas: la
+   * velocidad dice qué tan rápido corre un diámetro, el rango dice en cuáles
+   * la línea corre BIEN. Una línea puede tener velocidad tabulada para un
+   * diámetro y aun así no ser buena para él.
+   */
+  function pintarRangos() {
+    const caja = $('rangos');
+    if (!caja) return;
+    if (!rangos.length) {
+      caja.innerHTML = '';
+      return;
+    }
+    const respeta = reglas.find((r) => r.clave === 'respetarRangos')?.valor;
+    caja.innerHTML = `
+      <div class="tarjeta${respeta ? '' : ' apagada'}">
+        <h2>Diameter range per line <small>what the floor says each line runs well</small></h2>
+        <div class="cuerpo" style="padding:0"><div class="scroll">
+          <table>
+            <thead><tr>
+              <th>Line</th><th class="n">From (mm)</th><th class="n">To (mm)</th><th></th>
+            </tr></thead>
+            <tbody>${rangos.map(renglonRango).join('')}</tbody>
+          </table>
+        </div></div>
+        <p class="nota-tabla">${
+          respeta
+            ? 'No coil is moved to a line outside its range. What is already scheduled outside one is reported, not moved.'
+            : 'These ranges are <b>not being applied</b> — turn on the rule above to use them.'
+        }</p>
+      </div>`;
+
+    for (const e of caja.querySelectorAll('input[data-rango]')) {
+      e.addEventListener('change', () => cambiarRango(e.dataset.rango));
+    }
+    caja.querySelectorAll('button[data-quitar-rango]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        await api.quitarRango(b.dataset.quitarRango);
+        sucio = true;
+        await refrescar();
+        api.alCambiar?.();
+      });
+    });
+  }
+
+  function renglonRango(r) {
+    return `<tr${r.cambiado ? ' class="cambiado"' : ''}>
+      <td>${r.linea}</td>
+      <td class="n"><input type="number" step="0.01" min="0" max="40"
+            data-rango="${r.linea}" data-lado="min" value="${r.min}"></td>
+      <td class="n"><input type="number" step="0.01" min="0" max="40"
+            data-rango="${r.linea}" data-lado="max" value="${r.max}"></td>
+      <td style="text-align:right">${
+        r.cambiado
+          ? `<button class="borrar" data-quitar-rango="${r.linea}" title="Back to ${r.minSemilla}–${r.maxSemilla} mm">Reset</button>`
+          : ''
+      }</td>
+    </tr>`;
+  }
+
+  async function cambiarRango(linea) {
+    const caja = $('rangos');
+    const lo = Number(caja.querySelector(`input[data-rango="${linea}"][data-lado="min"]`).value);
+    const hi = Number(caja.querySelector(`input[data-rango="${linea}"][data-lado="max"]`).value);
+    const r = await api.guardarRango(linea, [lo, hi]);
+    if (r && r.ok === false) {
+      // El servicio es el que manda: si rechaza, se vuelve a pintar con lo
+      // que de verdad quedó guardado en vez de dejar el número a medias.
+      const e = $('error-respetarRangos');
+      if (e) {
+        e.textContent = (await r.json().catch(() => ({}))).error ?? 'The range was not saved.';
+        e.hidden = false;
+      }
+    }
+    sucio = true;
+    await refrescar();
+    api.alCambiar?.();
   }
 
   function campo(r) {
@@ -5882,7 +6188,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * paquete y del que lo lee, asi que cambiar cualquiera de ellos invalida lo
  * guardado sin que nadie se tenga que acordar.
  */
-const VERSION_PAQUETE = "5f84653644d1";
+const VERSION_PAQUETE = "c76951c670d3";
 
 let paquete = null;
 let estado = cargarEstado();
@@ -5895,9 +6201,12 @@ let ajustes = new Map(Object.entries(estado.ajustes ?? {}));
 // junto a los ajustes de velocidad y sobreviven a cerrar el navegador.
 let reglas = { ...(estado.reglas ?? {}) };
 
+// Los rangos de diametro que piso corrigio, encima de los que trae el modulo.
+let rangosAjustados = new Map(Object.entries(estado.rangos ?? {}));
+
 /** Los supuestos con que se corre, ya con lo que el programador cambio. */
 function supuestosVigentes() {
-  return reglasVigentes(reglas);
+  return { ...reglasVigentes(reglas), rangos: rangosAjustados };
 }
 
 /** Los puntos que consume el motor, ya con los ajustes aplicados. */
@@ -5910,7 +6219,7 @@ function recetasVigentes() {
 // cuota llena), y si falla el demo sigue funcionando en memoria.
 
 function cargarEstado() {
-  const vacio = { consecutivo: 0, programas: [], ajustes: {}, reglas: {} };
+  const vacio = { consecutivo: 0, programas: [], ajustes: {}, reglas: {}, rangos: {} };
   let guardado;
   try {
     guardado = JSON.parse(localStorage.getItem(LLAVE)) ?? vacio;
@@ -5927,6 +6236,7 @@ function cargarEstado() {
 function guardarEstado() {
   estado.ajustes = Object.fromEntries(ajustes);
   estado.reglas = reglas;
+  estado.rangos = Object.fromEntries(rangosAjustados);
   try {
     localStorage.setItem(LLAVE, JSON.stringify(estado));
   } catch {
@@ -6064,6 +6374,13 @@ $('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
 
 const pantallaReglas = montarReglas({
   datos: async () => reglasParaPantalla(reglas),
+  rangos: async () => rangosParaPantalla(rangosAjustados),
+  guardarRango: async (linea, rango) => {
+    if (revisarRango(rango)) return { ok: false, json: async () => ({ error: revisarRango(rango) }) };
+    rangosAjustados.set(linea, rango);
+    guardarEstado();
+  },
+  quitarRango: async (linea) => { rangosAjustados.delete(linea); guardarEstado(); },
   guardar: async (clave, valor) => { reglas[clave] = valor; guardarEstado(); },
   quitar: async (clave) => { delete reglas[clave]; guardarEstado(); },
   alCambiar: () => marcarProgramaDesactualizado(),

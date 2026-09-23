@@ -32,7 +32,10 @@ function paqueteConMovimientos() {
     }),
   );
   const prog = programa(ordenes);
-  const sup = { ...SUPUESTOS, objetivo: 'rendimiento', topeOrdenes: 99 };
+  // Sin el rango de piso: estas ordenes son sinteticas (14.7 mm de ITW-1 a
+  // ITW-7) y caerian fuera del rango real de ITW-7. Lo que se prueba aqui es
+  // el archivo que sale, no a donde se puede mover.
+  const sup = { ...SUPUESTOS, objetivo: 'rendimiento', topeOrdenes: 99, respetarRangos: false };
   return empaquetar({
     folio: 'FLO-2026-0001',
     archivo: 'Schedule_8200_09-17-2026.xlsx',

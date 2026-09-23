@@ -29,6 +29,7 @@ const FUENTES = [
   'src/motor/optimizador.js',
   'src/catalogo/velocidades.js',
   'src/catalogo/velocidades-catalogo.js',
+  'src/catalogo/rangos.js',
   'src/ingesta/comun.js',
   'src/ingesta/hoja.js',
   'src/ingesta/parametros.js',

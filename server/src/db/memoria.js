@@ -37,6 +37,22 @@ export class RepositorioMemoria {
     return { clave, valor };
   }
 
+  async leerRangos() {
+    return new Map(this.rangos ?? []);
+  }
+
+  async guardarRango(linea, rango) {
+    this.rangos = new Map(this.rangos ?? []);
+    this.rangos.set(linea, rango);
+    return { linea, rango };
+  }
+
+  async quitarRango(linea) {
+    if (!this.rangos?.has(linea)) return null;
+    this.rangos.delete(linea);
+    return { linea };
+  }
+
   async quitarRegla(clave) {
     if (!this.reglas || !(clave in this.reglas)) return null;
     const { [clave]: fuera, ...resto } = this.reglas;

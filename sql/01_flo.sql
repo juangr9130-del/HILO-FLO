@@ -156,6 +156,22 @@ CREATE TABLE flo_regla (
 );
 GO
 
+/* ---------- Rango de diametros por linea ----------
+   Lo que piso dice que cada linea corre BIEN, que es mas estrecho que lo que
+   la tabla de velocidades dice que PUEDE correr. Solo se guarda lo que planta
+   corrigio sobre el catalogo que trae el modulo. */
+CREATE TABLE flo_rango (
+    linea_id      SMALLINT      NOT NULL PRIMARY KEY,
+    diametro_min  DECIMAL(6,2)  NOT NULL,
+    diametro_max  DECIMAL(6,2)  NOT NULL,
+    cambiado_en   DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
+    cambiado_por  NVARCHAR(20)  NULL,
+    CONSTRAINT FK_flo_rango_linea FOREIGN KEY (linea_id) REFERENCES cat_linea(linea_id),
+    CONSTRAINT FK_flo_rango_usuario FOREIGN KEY (cambiado_por) REFERENCES cat_empleados(numero_empleado),
+    CONSTRAINT CK_flo_rango CHECK (diametro_min < diametro_max)
+);
+GO
+
 CREATE TABLE flo_programa (
     programa_id         INT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
     folio               VARCHAR(20)   NOT NULL,   -- 'FLO-2026-0007'

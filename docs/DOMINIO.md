@@ -156,6 +156,34 @@ en rojo con «past horizon» y el rollo que se parte a la mitad dice «does not
 fit». Una corrida sin receta no consume reloj (la línea no la puede correr)
 pero también aparece.
 
+### Dos cosas distintas: lo que la línea PUEDE correr y en lo que corre BIEN
+
+| | de dónde sale | qué dice |
+|---|---|---|
+| **tabla de velocidades** | el WI | qué diámetros **puede** correr la línea |
+| **rango de piso** | la experiencia de planta | en cuáles corre **bien** |
+
+El rango es mucho más estrecho: entre **23 % y 73 %** de los diámetros
+tabulados caen dentro. Por ejemplo ITW-7 tiene velocidad para 264 diámetros
+(5.49 a 18.55 mm) pero piso dice que corre bien de 15 a 18.
+
+Y sin embargo **el schedule del 17/09 ya casi lo respeta**: sólo 7 de 472
+rollos quedan fuera, y por décimas de milímetro (12.40 mm en ITW-2, que llega
+a 12.00; 16.10 en ITW-10, que llega a 16.00). O sea que el programador ya
+sigue esta regla aunque no estuviera escrita en ningún lado.
+
+Por eso el rango **frena a dónde se mueve material**, no reprueba lo que ya
+está programado: lo que ya corre fuera de rango se avisa y se deja, porque
+sacarlo sería imponerle al programador un cambio que él no pidió y puede
+haber una razón detrás.
+
+Los rangos viven en `src/catalogo/rangos.js` con lo que dio piso, y se
+corrigen desde la pantalla de **Rules** sin tocar código. Se pueden apagar con
+la regla *Respect the floor's diameter ranges*.
+
+**ITW-15 no tiene rango** porque no está instalada y piso no le dio uno. Una
+línea sin rango no se frena: no se le inventa uno.
+
 ### El rollo que va corriendo
 
 La hoja de corridas trae una casilla por rollo. Al marcar el que una línea

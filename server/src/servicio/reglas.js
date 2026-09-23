@@ -86,6 +86,15 @@ export const REGLAS = [
       'it is. Lower it once there is a measured OEE and every kg/h drops accordingly.',
   },
   {
+    clave: 'respetarRangos',
+    etiqueta: "Respect the floor's diameter ranges",
+    tipo: 'bandera',
+    ayuda:
+      'The floor gave the diameter range each line runs well, and it is much narrower ' +
+      'than the speed table. With this on, no coil is moved to a line outside its ' +
+      'range. What is already scheduled outside one is reported, not moved.',
+  },
+  {
     clave: 'itw15Activa',
     etiqueta: 'ITW-15 is installed',
     tipo: 'bandera',

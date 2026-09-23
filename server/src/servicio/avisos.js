@@ -111,12 +111,56 @@ export function avisoTope(propuesta) {
   };
 }
 
+/**
+ * Ordenes programadas fuera del rango que piso da para su linea.
+ *
+ * No se mueven: sacarlas seria imponerle al programador un cambio que el no
+ * pidio, y puede haber una razon detras. Se dicen, y el decide. Sobre el
+ * schedule del 17/09 son 7 de 472 rollos y por decimas de milimetro, o sea
+ * que el rango ya se respeta en la practica.
+ */
+export function avisoFueraDeRango(programa, rangos) {
+  if (!rangos) return null;
+  const fuera = [];
+  for (const o of programa.ordenes) {
+    const r = rangos.get(o.linea);
+    if (!r) continue;
+    if (o.diametroMm < r[0] - 1e-9 || o.diametroMm > r[1] + 1e-9) fuera.push({ orden: o, rango: r });
+  }
+  if (!fuera.length) return null;
+
+  const porLinea = new Map();
+  for (const { orden: o, rango } of fuera) {
+    if (!porLinea.has(o.linea)) porLinea.set(o.linea, { linea: o.linea, rango, ordenes: 0, kilogramos: 0, diametros: new Set() });
+    const g = porLinea.get(o.linea);
+    g.ordenes += 1;
+    g.kilogramos += o.kilogramos;
+    g.diametros.add(o.diametroMm);
+  }
+
+  return {
+    tipo: 'fuera_de_rango',
+    severidad: 'nota',
+    ordenes: fuera.length,
+    kilogramos: fuera.reduce((t, f) => t + f.orden.kilogramos, 0),
+    lineas: [...porLinea.values()].map((g) => ({
+      linea: g.linea,
+      min: g.rango[0],
+      max: g.rango[1],
+      ordenes: g.ordenes,
+      kilogramos: g.kilogramos,
+      diametros: [...g.diametros].sort((a, b) => a - b),
+    })),
+  };
+}
+
 /** Todos los avisos aplicables, de mayor a menor severidad. */
-export function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null) {
+export function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null, rangos = null) {
   const orden = { error: 0, nota: 1 };
   return [
     avisoSinReceta(evaluacion),
     avisoDevanador(programa, lineas, tabla, evaluacion),
+    avisoFueraDeRango(programa, rangos),
     propuesta ? avisoTope(propuesta) : null,
   ]
     .filter(Boolean)

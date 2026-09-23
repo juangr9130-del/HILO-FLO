@@ -285,11 +285,25 @@ export class Propuesta {
  * entradas, que no cuesta nada.
  */
 class Estado {
-  constructor(programa, lineas, tabla, { objetivo = 'calendario', limites = new Limites() } = {}) {
+  constructor(
+    programa,
+    lineas,
+    tabla,
+    { objetivo = 'calendario', limites = new Limites(), permiteDestino = null } = {},
+  ) {
     this.lineas = new Map(lineas.map((l) => [l.clave, l]));
     this.tabla = tabla;
     this.objetivo = objetivo;
     this.limites = limites;
+    /**
+     * Filtro extra sobre el destino de un movimiento, o null.
+     *
+     * Hoy lo usa el rango de diametros que piso dice que cada linea corre
+     * bien. Va aparte de la tabla de velocidades a proposito: la tabla dice
+     * que PUEDE correr la linea y esto en que corre BIEN; mezclarlos haria
+     * que corregir una velocidad cambiara sin querer lo que se permite.
+     */
+    this.permiteDestino = permiteDestino;
     this.asignacion = new Map(lineas.map((l) => [l.clave, programa.deLinea(l.clave)]));
     // Cuantas ordenes traia cada linea: el tope se mide contra ESTO y no
     // contra la vuelta anterior, si no la busqueda se aleja de a poquito.
@@ -448,6 +462,7 @@ export function buscarOportunidades(
     umbralHoras = UMBRAL_HORAS,
     objetivo = 'calendario',
     topeOrdenes = Infinity,
+    permiteDestino = null,
   } = {},
 ) {
   const evaluacionInicial = evaluarPrograma(programa, lineas, tabla);
@@ -458,7 +473,7 @@ export function buscarOportunidades(
     objetivo === 'rendimiento'
       ? new Limites({ techo: evaluacionInicial.makespan, topeOrdenes })
       : new Limites();
-  const estado = new Estado(programa, lineas, tabla, { objetivo, limites });
+  const estado = new Estado(programa, lineas, tabla, { objetivo, limites, permiteDestino });
   const destinosValidos = new Set(lineas.filter((l) => l.activa).map((l) => l.clave));
 
   for (let i = 0; i < maxMovimientos; i++) {
@@ -491,6 +506,7 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
     if (bloque.length < 2) continue; // de una sola se encarga la jugada 2
     for (const destino of estado.tabla.lineasPara(bloque[0])) {
       if (destino === bloque[0].linea || !destinosValidos.has(destino)) continue;
+      if (estado.permiteDestino && !estado.permiteDestino(destino, bloque[0])) continue;
       const [[puntaje, , , dentro], cambios] = estado.deltaMoverBloque(bloque, destino);
       if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
@@ -503,6 +519,7 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
   for (const orden of movibles) {
     for (const destino of estado.tabla.lineasPara(orden)) {
       if (destino === orden.linea || !destinosValidos.has(destino)) continue;
+      if (estado.permiteDestino && !estado.permiteDestino(destino, orden)) continue;
       const [[puntaje, , , dentro], cambios] = estado.deltaMover(orden, destino);
       if (puntaje > mejorPuntaje && dentro) {
         mejorPuntaje = puntaje;
@@ -523,6 +540,10 @@ function mejorJugada(estado, destinosValidos, umbralKg, umbralHoras, permitirPer
           if (a.diametroMm === b.diametroMm) continue; // permutar iguales no cambia nada
           if (!estado.tabla.puedeCorrer(b.linea, a)) continue;
           if (!estado.tabla.puedeCorrer(a.linea, b)) continue;
+          // Una permuta manda material en los dos sentidos: las dos patas
+          // tienen que caer en el rango de su linea nueva.
+          if (estado.permiteDestino && !estado.permiteDestino(b.linea, a)) continue;
+          if (estado.permiteDestino && !estado.permiteDestino(a.linea, b)) continue;
           const [[puntaje, , , dentro], cambios] = estado.deltaPermutar(a, b);
           if (puntaje > mejorPuntaje && dentro) {
             mejorPuntaje = puntaje;

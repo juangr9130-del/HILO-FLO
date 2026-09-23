@@ -22,18 +22,22 @@ const puntos = [
   punto('ITW-2', 12, 120),
 ];
 
+// Sin el rango de piso: estas lineas y diametros son sinteticos y chocarian
+// con los rangos reales. Lo que se prueba aqui es la aritmetica del desglose,
+// no a donde se puede mover.
+const SUP = { ...SUPUESTOS, respetarRangos: false };
+
 function paqueteDePrueba() {
   const ordenes = [];
   for (let i = 0; i < 10; i++) {
     ordenes.push(orden(`O${i}`, i % 2 === 0 ? 10 : 12, 6000, 'ITW-2', { secuencia: i }));
   }
   const prog = programa(ordenes);
-  const r = analizar(prog, puntos, SUPUESTOS);
   return empaquetar({
     folio: 'FLO-TEST',
     archivo: 'prueba.xlsx',
-    supuestos: SUPUESTOS,
-    ...r,
+    supuestos: SUP,
+    ...analizar(prog, puntos, SUP),
   });
 }
 
@@ -154,7 +158,7 @@ test('la cifra titular del folio corresponde al objetivo con que se corrio', () 
   // no se mueve a proposito, asi que ese mismo numero sale ridiculo y lo que
   // vale es la tonelada del tiempo de maquina ganado.
   for (const objetivo of ['calendario', 'rendimiento']) {
-    const sup = { ...SUPUESTOS, objetivo };
+    const sup = { ...SUPUESTOS, objetivo, respetarRangos: false };
     const prog = programa(
       Array.from({ length: 10 }, (_, i) =>
         orden(`O${i}`, i % 2 === 0 ? 10 : 12, 6000, 'ITW-2', { secuencia: i }),

@@ -520,3 +520,13 @@ table.rollos tr.hecha td.notas { color: #c2c9d1; }
 
 /* El cierre de una línea anclada es un pronóstico, no el plan: se distingue. */
 .tarjeta > h2 .cierre.anclado { color: var(--verde); font-weight: 600; }
+
+/* Rangos de diámetro: la tabla se apaga cuando la regla no está prendida,
+   para que no parezca que se está aplicando algo que no. */
+.tarjeta.apagada { opacity: 0.55; }
+.tarjeta.apagada input { background: #f4f6f8; }
+#rangos input[type='number'] {
+  width: 84px; font: inherit; font-family: 'Barlow Condensed', sans-serif; font-size: 15px;
+  padding: 3px 7px; border: 1px solid var(--borde); border-radius: 5px; text-align: right;
+}
+#rangos tr.cambiado td:first-child { box-shadow: inset 3px 0 0 var(--naranja); font-weight: 600; }

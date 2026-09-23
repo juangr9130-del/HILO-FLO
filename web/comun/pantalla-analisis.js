@@ -175,6 +175,7 @@ function montarAnalisis(api = {}) {
     const pintores = {
       devanador_no_indicado: pintarAvisoDevanador,
       tope_alcanzado: pintarAvisoTope,
+      fuera_de_rango: pintarAvisoFueraDeRango,
     };
     $('avisos').innerHTML = desactualizado + avisos
       .map((av) => (pintores[av.tipo] ?? pintarAvisoSinReceta)(av))
@@ -191,6 +192,25 @@ function montarAnalisis(api = {}) {
       ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h more</b>` : ''}.
       <div style="margin-top:5px;color:var(--texto-tenue)">
         ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} orders, ${num(l.kilogramos)} kg`).join(' · ')}
+      </div>
+    </div>`;
+  }
+
+  function pintarAvisoFueraDeRango(av) {
+    return `<div class="aviso nota">
+      <strong>${av.ordenes} ${av.ordenes === 1 ? 'coil is' : 'coils are'}
+      (${num(av.kilogramos)} kg) on a line outside the diameter range the floor gave
+      for it.</strong>
+      They were left where you put them — moving them would be a change you did not ask
+      for, and there may be a reason. The rebalance will not send more material outside
+      these ranges.
+      <div style="margin-top:5px;color:var(--texto-tenue)">
+        ${av.lineas
+          .map(
+            (l) =>
+              `${l.linea} (runs ${num(l.min, 2)}–${num(l.max, 2)} mm): ${l.ordenes} ${l.ordenes === 1 ? 'coil' : 'coils'} at ${l.diametros.map((d) => num(d, 2)).join(', ')} mm`,
+          )
+          .join(' · ')}
       </div>
     </div>`;
   }

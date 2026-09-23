@@ -65,8 +65,13 @@ test('cambiar el tope cambia de verdad lo que el analisis propone', () => {
     orden(`O${i}`, 14.7, 3000, 'ITW-1', { secuencia: i }),
   );
 
+  // respetarRangos apagado: 14.7 mm de ITW-1 a ITW-7 cae fuera del rango real
+  // de ITW-7, y lo que se prueba aqui es el tope, no el rango.
   const movidas = (tope) =>
-    analizar(programa(ordenes), puntos, reglasVigentes({ topeOrdenes: tope }))
+    analizar(programa(ordenes), puntos, {
+      ...reglasVigentes({ topeOrdenes: tope }),
+      respetarRangos: false,
+    })
       .propuesta.agrupadas()
       .reduce((t, g) => t + g.ordenes.length, 0);
 

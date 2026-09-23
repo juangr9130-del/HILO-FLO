@@ -37,9 +37,12 @@ let ajustes = new Map(Object.entries(estado.ajustes ?? {}));
 // junto a los ajustes de velocidad y sobreviven a cerrar el navegador.
 let reglas = { ...(estado.reglas ?? {}) };
 
+// Los rangos de diametro que piso corrigio, encima de los que trae el modulo.
+let rangosAjustados = new Map(Object.entries(estado.rangos ?? {}));
+
 /** Los supuestos con que se corre, ya con lo que el programador cambio. */
 function supuestosVigentes() {
-  return reglasVigentes(reglas);
+  return { ...reglasVigentes(reglas), rangos: rangosAjustados };
 }
 
 /** Los puntos que consume el motor, ya con los ajustes aplicados. */
@@ -52,7 +55,7 @@ function recetasVigentes() {
 // cuota llena), y si falla el demo sigue funcionando en memoria.
 
 function cargarEstado() {
-  const vacio = { consecutivo: 0, programas: [], ajustes: {}, reglas: {} };
+  const vacio = { consecutivo: 0, programas: [], ajustes: {}, reglas: {}, rangos: {} };
   let guardado;
   try {
     guardado = JSON.parse(localStorage.getItem(LLAVE)) ?? vacio;
@@ -69,6 +72,7 @@ function cargarEstado() {
 function guardarEstado() {
   estado.ajustes = Object.fromEntries(ajustes);
   estado.reglas = reglas;
+  estado.rangos = Object.fromEntries(rangosAjustados);
   try {
     localStorage.setItem(LLAVE, JSON.stringify(estado));
   } catch {
@@ -206,6 +210,13 @@ $('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
 
 const pantallaReglas = montarReglas({
   datos: async () => reglasParaPantalla(reglas),
+  rangos: async () => rangosParaPantalla(rangosAjustados),
+  guardarRango: async (linea, rango) => {
+    if (revisarRango(rango)) return { ok: false, json: async () => ({ error: revisarRango(rango) }) };
+    rangosAjustados.set(linea, rango);
+    guardarEstado();
+  },
+  quitarRango: async (linea) => { rangosAjustados.delete(linea); guardarEstado(); },
   guardar: async (clave, valor) => { reglas[clave] = valor; guardarEstado(); },
   quitar: async (clave) => { delete reglas[clave]; guardarEstado(); },
   alCambiar: () => marcarProgramaDesactualizado(),

@@ -8,6 +8,7 @@ import { exigirAcceso, exigirEscritura, hayAutenticacion } from '../auth.js';
 import { analizar, empaquetar, matrizRendimiento } from '../servicio/analisis.js';
 import { ErrorDeDatos } from '../errores.js';
 import { reglasParaPantalla, reglasVigentes, revisarRegla } from '../servicio/reglas.js';
+import { rangosParaPantalla, revisarRango } from '../catalogo/rangos.js';
 import { leerPrograma } from '../ingesta/servidor.js';
 import {
   DOCUMENTO,
@@ -135,6 +136,43 @@ export function crearApi(repo) {
     }
   });
 
+  /* ---------- Rango de diametros por linea ---------- */
+
+  api.get('/rangos', async (req, res, siguiente) => {
+    try {
+      res.json(rangosParaPantalla(await repo.leerRangos()));
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
+  api.put('/rangos/:linea', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      const rango = [Number(req.body?.min), Number(req.body?.max)];
+      const motivo = revisarRango(rango);
+      if (motivo) return res.status(400).json({ error: `Not saved: ${motivo}.` });
+      const guardado = await repo.guardarRango(
+        req.params.linea,
+        rango,
+        req.usuario?.numeroEmpleado ?? null,
+      );
+      if (!guardado) return res.status(404).json({ error: 'That line is not in the catalog.' });
+      res.json(guardado);
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
+  api.delete('/rangos/:linea', exigirEscritura, async (req, res, siguiente) => {
+    try {
+      const quitado = await repo.quitarRango(req.params.linea);
+      if (!quitado) return res.status(404).json({ error: 'That line is already at its default.' });
+      res.json(quitado);
+    } catch (e) {
+      siguiente(e);
+    }
+  });
+
   /* ---------- Programas ---------- */
 
   api.get('/programas', async (req, res, siguiente) => {
@@ -154,6 +192,7 @@ export function crearApi(repo) {
       // Las reglas que el programador dejo guardadas mandan sobre la
       // configuracion del proceso; el cuerpo de la peticion solo sobre ellas.
       const supuestos = reglasVigentes(await repo.leerReglas());
+      supuestos.rangos = await repo.leerRangos();
       if (req.body.horas) supuestos.horasDisponibles = Number(req.body.horas);
       if (req.body.eficiencia) supuestos.eficiencia = Number(req.body.eficiencia);
       if (req.body.minutosCambio) supuestos.minutosCambio = Number(req.body.minutosCambio);
@@ -227,6 +266,7 @@ export function crearApi(repo) {
 
       const { Programa, Orden } = await import('../motor/modelos.js');
       const supuestos = reglasVigentes(await repo.leerReglas());
+      supuestos.rangos = await repo.leerRangos();
       const programa = new Programa(previo.detalleOrdenes.map((o) => new Orden(o)));
       const paquete = empaquetar({
         folio: await repo.siguienteFolio(),
