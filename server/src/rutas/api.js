@@ -9,6 +9,7 @@ import { analizar, empaquetar, matrizRendimiento } from '../servicio/analisis.js
 import { ErrorDeDatos } from '../errores.js';
 import { reglasParaPantalla, reglasVigentes, revisarRegla } from '../servicio/reglas.js';
 import { rangosParaPantalla, revisarRango } from '../catalogo/rangos.js';
+import { restriccionesParaPantalla } from '../catalogo/restricciones.js';
 import { leerPrograma } from '../ingesta/servidor.js';
 import {
   DOCUMENTO,
@@ -134,6 +135,12 @@ export function crearApi(repo) {
     } catch (e) {
       siguiente(e);
     }
+  });
+
+  /* ---------- Que tipos de rollo corre cada linea ---------- */
+
+  api.get('/restricciones', (req, res) => {
+    res.json(restriccionesParaPantalla());
   });
 
   /* ---------- Rango de diametros por linea ---------- */

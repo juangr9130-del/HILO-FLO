@@ -17,10 +17,12 @@ function montarReglas(api = {}) {
   let sucio = false;
 
   let rangos = [];
+  let restricciones = [];
 
   async function refrescar() {
     reglas = await api.datos();
     rangos = (await api.rangos?.()) ?? [];
+    restricciones = (await api.restricciones?.()) ?? [];
     pintar();
   }
 
@@ -36,6 +38,7 @@ function montarReglas(api = {}) {
       b.addEventListener('click', () => restablecer(b.dataset.restablecer));
     });
     pintarRangos();
+    pintarRestricciones();
     pintarPie();
   }
 
@@ -84,6 +87,49 @@ function montarReglas(api = {}) {
         api.alCambiar?.();
       });
     });
+  }
+
+  /**
+   * Qué tipos de rollo puede correr cada línea.
+   *
+   * No se pueden apagar como los rangos: el rango es una preferencia de piso,
+   * esto es lo que la línea puede o no puede correr. Se muestran con la frase
+   * original del programador para que se pueda cotejar contra su correo.
+   */
+  function pintarRestricciones() {
+    const caja = $('restricciones');
+    if (!caja) return;
+    if (!restricciones.length) {
+      caja.innerHTML = '';
+      return;
+    }
+    caja.innerHTML = `
+      <div class="tarjeta">
+        <h2>Which lines can run which coils <small>from the scheduler, always applied</small></h2>
+        <div class="cuerpo" style="padding:0"><div class="scroll">
+          <table>
+            <thead><tr>
+              <th>Coil type</th><th></th><th>Lines</th><th>As it was given to us</th>
+            </tr></thead>
+            <tbody>${restricciones
+              .map(
+                (r) => `<tr${r.cambiada ? ' class="cambiado"' : ''}>
+                  <td><b>${r.etiqueta}</b></td>
+                  <td class="modo">${r.modo === 'solo' ? 'only on' : 'never on'}</td>
+                  <td>${r.lineas.join(', ')}</td>
+                  <td class="fuente">${r.fuente}</td>
+                </tr>`,
+              )
+              .join('')}</tbody>
+          </table>
+        </div></div>
+        <p class="nota-tabla">
+          <b>"Only on" wins over "never on".</b> The top down coils are also small ID, so
+          the two rules together would leave them nowhere — and they already run on ITW-2
+          every day. A rule that names the few lines that <i>can</i> do something beats a
+          general "not here".
+        </p>
+      </div>`;
   }
 
   function renglonRango(r) {

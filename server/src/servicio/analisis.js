@@ -9,6 +9,7 @@ import { evaluarPrograma } from '../motor/programa.js';
 import { buscarOportunidades } from '../motor/optimizador.js';
 import { reunirAvisos } from './avisos.js';
 import { dentroDelRango, rangosVigentes } from '../catalogo/rangos.js';
+import { lineaPermitida, restriccionesVigentes } from '../catalogo/restricciones.js';
 import { hojaDeCorridas, inicioDelPrograma } from './corridas.js';
 import { ErrorDeDatos } from '../errores.js';
 import { redondear } from '../util/numeros.js';
@@ -124,10 +125,14 @@ export function analizar(programa, puntos, supuestos = {}) {
   const evaluacion = evaluarPrograma(programa, lineas, tabla);
   const rangos = rangosVigentes(supuestos.rangos);
   const respetar = supuestos.respetarRangos ?? SUPUESTOS.respetarRangos;
+  // Las restricciones por atributo del rollo NO se pueden apagar: no son una
+  // preferencia sino lo que la linea puede o no puede correr. El rango si,
+  // porque es una preferencia de piso.
+  const restricciones = restriccionesVigentes(supuestos.restricciones);
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
-    permiteDestino: respetar
-      ? (destino, orden) => dentroDelRango(rangos, destino, orden.diametroMm)
-      : null,
+    permiteDestino: (destino, orden) =>
+      lineaPermitida(restricciones, destino, orden) &&
+      (!respetar || dentroDelRango(rangos, destino, orden.diametroMm)),
     maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
     objetivo: supuestos.objetivo ?? SUPUESTOS.objetivo,
     topeOrdenes: supuestos.topeOrdenes ?? SUPUESTOS.topeOrdenes,
@@ -233,6 +238,7 @@ export function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla
         (supuestos.respetarRangos ?? SUPUESTOS.respetarRangos)
           ? rangosVigentes(supuestos.rangos)
           : null,
+        restriccionesVigentes(supuestos.restricciones),
       ),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,

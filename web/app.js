@@ -87,6 +87,7 @@ const reglas = montarReglas({
     }),
   quitar: (clave) => fetch(`/api/reglas/${encodeURIComponent(clave)}`, { method: 'DELETE' }),
   rangos: () => fetch('/api/rangos').then((r) => r.json()),
+  restricciones: () => fetch('/api/restricciones').then((r) => r.json()),
   guardarRango: (linea, [min, max]) =>
     fetch(`/api/rangos/${encodeURIComponent(linea)}`, {
       method: 'PUT',

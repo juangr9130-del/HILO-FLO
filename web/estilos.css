@@ -554,3 +554,8 @@ tr.corrida.encima td { box-shadow: inset 0 3px 0 var(--naranja); }
 .consejo-orden .controles { margin: 0; }
 .consejo-orden .gana { color: var(--verde); }
 .consejo-orden .pierde { color: var(--rojo); }
+
+/* Restricciones por tipo de rollo. */
+#restricciones td.modo { text-align: left; color: var(--texto-tenue); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+#restricciones td.fuente { text-align: left; color: var(--texto-tenue); font-size: 12px; font-style: italic; }
+#restricciones tr.cambiado td:first-child { box-shadow: inset 3px 0 0 var(--naranja); }

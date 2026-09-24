@@ -67,6 +67,27 @@ export function esSlm(descripcion) {
 }
 
 /**
+ * SID: Small Inner Diameter. El rollo trae el ojo chico.
+ *
+ * Aparece escrito de las dos maneras -- "half SID" y "SID half" -- y a veces
+ * en la descripcion y a veces en las notas, asi que se buscan las dos juntas.
+ */
+export function esSid(texto) {
+  return /\bSID\b/.test(String(texto).toUpperCase());
+}
+
+/**
+ * Rollo de devanado de arriba hacia abajo.
+ *
+ * Casi nunca viene como "TDC": en el schedule del 17/09 son 3 asi y 20 con
+ * "TOP DOWN" escrito en las notas. Buscar solo la sigla dejaria fuera a 17 de
+ * 20, que es justo el material que la regla amarra a ITW-2.
+ */
+export function esTopDown(texto) {
+  return /\bTDC\b|TOP\s*DOWN/.test(String(texto).toUpperCase());
+}
+
+/**
  * Devanador que indica el schedule, o null si no dice nada.
  *
  * El WI pide que se anote el DEM en notas. Se lee tambien el Neturen para
@@ -142,6 +163,8 @@ export function interpretarPrograma({ filas }, horizonte = '') {
         descripcion,
         grupoGrado: gradoDe(descripcion),
         slm: esSlm(descripcion),
+        sid: esSid(`${descripcion} ${notas}`),
+        topDown: esTopDown(`${descripcion} ${notas}`),
         winder: winderDe(`${descripcion} ${notas}`),
         secuencia,
         notas,

@@ -151,6 +151,8 @@ export class Orden {
     descripcion = '',
     grupoGrado = '9254',
     slm = false,
+    sid = false,
+    topDown = false,
     winder = null,
     secuencia = 0,
     notas = '',
@@ -167,6 +169,10 @@ export class Orden {
     this.descripcion = descripcion;
     this.grupoGrado = grupoGrado;
     this.slm = slm;
+    // Atributos del rollo que amarran en que lineas puede correr. La receta
+    // no los mira: son restricciones de planta. Ver catalogo/restricciones.js.
+    this.sid = sid;
+    this.topDown = topDown;
     this.winder = winder;
     this.secuencia = secuencia;
     this.notas = notas;

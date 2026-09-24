@@ -176,6 +176,7 @@ function montarAnalisis(api = {}) {
       devanador_no_indicado: pintarAvisoDevanador,
       tope_alcanzado: pintarAvisoTope,
       fuera_de_rango: pintarAvisoFueraDeRango,
+      restriccion_rota: pintarAvisoRestriccion,
     };
     $('avisos').innerHTML = desactualizado + avisos
       .map((av) => (pintores[av.tipo] ?? pintarAvisoSinReceta)(av))
@@ -192,6 +193,24 @@ function montarAnalisis(api = {}) {
       ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h more</b>` : ''}.
       <div style="margin-top:5px;color:var(--texto-tenue)">
         ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} orders, ${num(l.kilogramos)} kg`).join(' · ')}
+      </div>
+    </div>`;
+  }
+
+  function pintarAvisoRestriccion(av) {
+    return `<div class="aviso error">
+      <strong>${av.ordenes} ${av.ordenes === 1 ? 'coil is' : 'coils are'}
+      (${num(av.kilogramos)} kg) on a line that cannot run that kind of coil.</strong>
+      This is not a preference like the diameter ranges — it is what the line can and
+      cannot take. Check whether the coil is on the wrong line, or whether the marker in
+      its description is wrong.
+      <div style="margin-top:5px;color:var(--texto-tenue)">
+        ${av.reglas
+          .map(
+            (r) =>
+              `${r.etiqueta} ${r.modo === 'solo' ? 'only run on' : 'cannot run on'} ${r.lineas.join(', ')} — ${r.ordenes} ${r.ordenes === 1 ? 'coil' : 'coils'} on ${r.donde.join(', ')}`,
+          )
+          .join(' · ')}
       </div>
     </div>`;
   }

@@ -211,6 +211,7 @@ $('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
 const pantallaReglas = montarReglas({
   datos: async () => reglasParaPantalla(reglas),
   rangos: async () => rangosParaPantalla(rangosAjustados),
+  restricciones: async () => restriccionesParaPantalla(),
   guardarRango: async (linea, rango) => {
     if (revisarRango(rango)) return { ok: false, json: async () => ({ error: revisarRango(rango) }) };
     rangosAjustados.set(linea, rango);

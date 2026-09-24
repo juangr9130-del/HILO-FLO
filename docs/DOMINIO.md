@@ -156,6 +156,41 @@ en rojo con «past horizon» y el rollo que se parte a la mitad dice «does not
 fit». Una corrida sin receta no consume reloj (la línea no la puede correr)
 pero también aparece.
 
+### Qué tipos de rollo puede correr cada línea
+
+Aparte de la medida, hay atributos del rollo que lo amarran a ciertas líneas.
+Los dio el programador de Florence por correo, y se leen de la descripción y
+las notas del schedule:
+
+| tipo de rollo | dónde | marcador |
+|---|---|---|
+| **Top down** | sólo ITW-2 | `TDC` o `TOP DOWN` |
+| **SLM** | sólo ITW-4 e ITW-10 | `SLM` |
+| **Small ID** | nunca en ITW-2, 4, 10, 11 | `SID` |
+
+**«Sólo» le gana a «nunca».** Es lo que resuelve el único choque de las
+reglas: los 20 rollos *top down* del schedule del 17/09 son **también SID**, y
+las dos reglas juntas no les dejarían ninguna línea. Pero esos 20 rollos ya
+corren en ITW-2 todos los días, así que en la práctica manda el «sólo». Tiene
+sentido: una regla que nombra las pocas líneas que **pueden** hacer algo pesa
+más que un «aquí no».
+
+Con esa precedencia, **las 472 órdenes del schedule cumplen las reglas al
+100 %**. Sin ella, el módulo declararía imposible lo que la planta hace a
+diario.
+
+Dos detalles de lectura que costaron:
+
+- **SID viene escrito de las dos formas**, `half SID` y `SID half`, y a veces
+  en las notas y no en la descripción. Hay que leer las dos columnas juntas.
+- **«Top down» casi nunca viene como `TDC`**: en el schedule del 17/09 son 3
+  con la sigla y **20 con las palabras** en las notas. Buscar sólo la sigla
+  dejaba fuera a 17 de 20 — justo el material que la regla amarra a ITW-2.
+
+Estas restricciones **no se pueden apagar**, a diferencia de los rangos: el
+rango es una preferencia de piso, esto es lo que la línea puede o no puede
+correr.
+
 ### Dos cosas distintas: lo que la línea PUEDE correr y en lo que corre BIEN
 
 | | de dónde sale | qué dice |

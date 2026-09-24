@@ -581,6 +581,11 @@ tr.corrida.encima td { box-shadow: inset 0 3px 0 var(--naranja); }
 .consejo-orden .gana { color: var(--verde); }
 .consejo-orden .pierde { color: var(--rojo); }
 
+/* Restricciones por tipo de rollo. */
+#restricciones td.modo { text-align: left; color: var(--texto-tenue); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+#restricciones td.fuente { text-align: left; color: var(--texto-tenue); font-size: 12px; font-style: italic; }
+#restricciones tr.cambiado td:first-child { box-shadow: inset 3px 0 0 var(--naranja); }
+
 
 /* Sólo del demo: el banner que aclara que esto no es el módulo instalado. */
 .banner-demo {
@@ -725,6 +730,7 @@ tr.corrida.encima td { box-shadow: inset 0 3px 0 var(--naranja); }
     </div>
     <div id="reglas"></div>
     <div id="rangos"></div>
+    <div id="restricciones"></div>
     <div id="pie-reglas"></div>
   </section>
 
@@ -954,6 +960,8 @@ class Orden {
     descripcion = '',
     grupoGrado = '9254',
     slm = false,
+    sid = false,
+    topDown = false,
     winder = null,
     secuencia = 0,
     notas = '',
@@ -970,6 +978,10 @@ class Orden {
     this.descripcion = descripcion;
     this.grupoGrado = grupoGrado;
     this.slm = slm;
+    // Atributos del rollo que amarran en que lineas puede correr. La receta
+    // no los mira: son restricciones de planta. Ver catalogo/restricciones.js.
+    this.sid = sid;
+    this.topDown = topDown;
     this.winder = winder;
     this.secuencia = secuencia;
     this.notas = notas;
@@ -2664,6 +2676,14 @@ function clavesValidas() {
  * Por eso se usa para frenar A DONDE se mueve material, no para reprobar lo
  * que ya esta programado: lo que ya corre fuera de rango se avisa y se deja,
  * que sacarlo seria imponerle al programador un cambio que el no pidio.
+ *
+ * Aqui viven tambien las reglas de DIAMETRO del correo del programador, que es
+ * donde corresponde. La de "solo HTL 13 arriba de 19.5 mm" ya se cumplia sola
+ * -- ninguna otra linea llega ahi -- y la de HTL 5 y 6 bajo sus maximos, con
+ * la nota de que contradice al papel.
+ *
+ * Lo que NO vive aqui son las restricciones por atributo del rollo (small ID,
+ * top down, SLM): esas no dependen de la medida y estan en restricciones.js.
  */
 
 /** Lo que entrego piso, en mm. Cada linea: [minimo, maximo]. */
@@ -2672,8 +2692,13 @@ const RANGOS = new Map([
   ['ITW-2', [5.0, 12.0]],
   ['ITW-3', [9.0, 13.5]],
   ['ITW-4', [10.0, 13.5]],
-  ['ITW-5', [12.0, 15.5]],
-  ['ITW-6', [13.0, 16.0]],
+  // El papel de piso decia 15.50 y 16.00, pero el correo del programador
+  // ("Production does not [want] anything over 14.4mm ran HTL's 5 and 6 do to
+  // the speed that these two lines run at") baja las dos a 14.40. Se toma el
+  // correo por ser posterior y mas especifico, y porque no cuesta nada: en el
+  // schedule del 17/09 ninguna orden de esas dos lineas pasa de 14.40.
+  ['ITW-5', [12.0, 14.4]],
+  ['ITW-6', [13.0, 14.4]],
   ['ITW-7', [15.0, 18.0]],
   ['ITW-8', [15.0, 18.0]],
   ['ITW-9', [13.0, 16.0]],
@@ -2732,6 +2757,129 @@ function rangosParaPantalla(ajustes = new Map()) {
       cambiado: v[0] !== semilla[0] || v[1] !== semilla[1],
     };
   });
+}
+
+// ===== src/catalogo/restricciones.js =================================
+
+/**
+ * En que lineas puede correr un rollo segun sus atributos.
+ *
+ * Son OTRA cosa que el rango de diametros: el rango dice en que medidas una
+ * linea corre bien, esto dice que tipos de rollo puede o no puede correr,
+ * independientemente de la medida. Las dio el programador de Florence por
+ * correo (John Pitts, "RE: Francisco Contact").
+ *
+ * Dos modos:
+ *
+ *   SOLO   ese tipo de rollo unicamente corre en esas lineas.
+ *   NUNCA  ese tipo de rollo no corre en esas lineas.
+ *
+ * PRECEDENCIA: SOLO le gana a NUNCA, y es lo que resuelve el unico choque que
+ * traen las reglas. Los 20 rollos "top down" del schedule del 17/09 son
+ * tambien SID: top down dice "solo en ITW-2" y small ID dice "nunca en ITW-2",
+ * asi que juntos no dejarian ninguna linea. Y sin embargo esos 20 rollos YA
+ * corren en ITW-2 hoy, o sea que en la practica manda el "solo". Un "solo" es
+ * una capacidad que unas pocas lineas tienen; un "nunca" es una preferencia
+ * general, y lo especifico gana.
+ *
+ * Las reglas de DIAMETRO del mismo correo no viven aqui, viven en rangos.js,
+ * que es donde ya se decide por medida:
+ *
+ *   "solo HTL 13 corre arriba de 19.5 mm"  -> ya se cumple: ninguna otra
+ *      linea tiene rango arriba de 19.5.
+ *   "nada arriba de 14.4 en HTL 5 y 6"     -> bajo el maximo de esas dos a
+ *      14.4, y CONTRADICE el papel de piso (5 llegaba a 15.50 y 6 a 16.00).
+ *      Ver rangos.js.
+ */
+
+/** @type {{clave, etiqueta, modo, lineas, atributo}[]} */
+const RESTRICCIONES = [
+  {
+    clave: 'topDown',
+    etiqueta: 'Top down coils',
+    modo: 'solo',
+    lineas: ['ITW-2'],
+    atributo: (o) => Boolean(o.topDown),
+    fuente: 'Top Down coils can only be ran on HTL 2',
+  },
+  {
+    clave: 'slm',
+    etiqueta: 'SLM coils',
+    modo: 'solo',
+    lineas: ['ITW-4', 'ITW-10'],
+    atributo: (o) => Boolean(o.slm),
+    fuente: "SLM coils can only run on HTL's 4 and 10",
+  },
+  {
+    clave: 'sid',
+    etiqueta: 'Small ID coils',
+    modo: 'nunca',
+    lineas: ['ITW-2', 'ITW-4', 'ITW-10', 'ITW-11'],
+    atributo: (o) => Boolean(o.sid),
+    fuente: "Small ID coils cannot run on HTL's 2, 4, 10, or 11",
+  },
+];
+
+const POR_RESTRICCION = new Map(RESTRICCIONES.map((r) => [r.clave, r]));
+
+/** Las restricciones con las lineas que planta haya corregido. */
+function restriccionesVigentes(ajustes = new Map()) {
+  return RESTRICCIONES.map((r) => {
+    const a = ajustes instanceof Map ? ajustes.get(r.clave) : ajustes?.[r.clave];
+    return Array.isArray(a) && a.length ? { ...r, lineas: [...a] } : r;
+  });
+}
+
+/**
+ * ¿Ese rollo puede correr en esa linea?
+ *
+ * Se resuelve en dos pasos para que SOLO le gane a NUNCA: primero se arma el
+ * conjunto permitido con los SOLO que apliquen, y despues los NUNCA recortan
+ * -- pero solo si al recortar queda algo. Si un NUNCA vaciara el conjunto, se
+ * ignora: la capacidad especifica manda sobre la preferencia general.
+ */
+function lineaPermitida(restricciones, linea, orden) {
+  const solos = restricciones.filter((r) => r.modo === 'solo' && r.atributo(orden));
+  for (const r of solos) {
+    if (!r.lineas.includes(linea)) return false;
+  }
+
+  const nunca = restricciones.filter((r) => r.modo === 'nunca' && r.atributo(orden));
+  if (!nunca.length) return true;
+  if (solos.length) return true; // el SOLO ya decidio; el NUNCA no lo recorta mas
+  return !nunca.some((r) => r.lineas.includes(linea));
+}
+
+/** Las restricciones que ese rollo activa, para poder explicarlo en pantalla. */
+function restriccionesDe(restricciones, orden) {
+  const solos = restricciones.filter((r) => r.modo === 'solo' && r.atributo(orden));
+  const nunca = restricciones.filter((r) => r.modo === 'nunca' && r.atributo(orden));
+  // Si hay un SOLO, el NUNCA quedo sin efecto y decirlo confundiria.
+  return solos.length ? solos : nunca;
+}
+
+/** Lo que pinta la pantalla. */
+function restriccionesParaPantalla(ajustes = new Map()) {
+  return restriccionesVigentes(ajustes).map((r) => {
+    const semilla = POR_RESTRICCION.get(r.clave).lineas;
+    return {
+      clave: r.clave,
+      etiqueta: r.etiqueta,
+      modo: r.modo,
+      lineas: r.lineas,
+      semilla,
+      fuente: r.fuente,
+      cambiada: r.lineas.join(',') !== semilla.join(','),
+    };
+  });
+}
+
+/** Motivo por el que una lista de lineas no se acepta, o null. */
+function revisarRestriccion(clave, lineas) {
+  if (!POR_RESTRICCION.has(clave)) return 'that restriction does not exist';
+  if (!Array.isArray(lineas) || !lineas.length) return 'pick at least one line';
+  if (lineas.some((l) => !/^ITW-\d+$/.test(String(l)))) return 'those are not line codes';
+  return null;
 }
 
 // ===== src/ingesta/comun.js ==========================================
@@ -2962,6 +3110,27 @@ function esSlm(descripcion) {
 }
 
 /**
+ * SID: Small Inner Diameter. El rollo trae el ojo chico.
+ *
+ * Aparece escrito de las dos maneras -- "half SID" y "SID half" -- y a veces
+ * en la descripcion y a veces en las notas, asi que se buscan las dos juntas.
+ */
+function esSid(texto) {
+  return /\bSID\b/.test(String(texto).toUpperCase());
+}
+
+/**
+ * Rollo de devanado de arriba hacia abajo.
+ *
+ * Casi nunca viene como "TDC": en el schedule del 17/09 son 3 asi y 20 con
+ * "TOP DOWN" escrito en las notas. Buscar solo la sigla dejaria fuera a 17 de
+ * 20, que es justo el material que la regla amarra a ITW-2.
+ */
+function esTopDown(texto) {
+  return /\bTDC\b|TOP\s*DOWN/.test(String(texto).toUpperCase());
+}
+
+/**
  * Devanador que indica el schedule, o null si no dice nada.
  *
  * El WI pide que se anote el DEM en notas. Se lee tambien el Neturen para
@@ -3037,6 +3206,8 @@ function interpretarPrograma({ filas }, horizonte = '') {
         descripcion,
         grupoGrado: gradoDe(descripcion),
         slm: esSlm(descripcion),
+        sid: esSid(`${descripcion} ${notas}`),
+        topDown: esTopDown(`${descripcion} ${notas}`),
         winder: winderDe(`${descripcion} ${notas}`),
         secuencia,
         notas,
@@ -3500,6 +3671,7 @@ function empaquetarZip(entradas) {
 
 
 
+
 /**
  * Ordenes que corren en una linea cuya receta depende del devanador, pero
  * cuyo schedule no anoto cual se uso.
@@ -3643,12 +3815,56 @@ function avisoFueraDeRango(programa, rangos) {
   };
 }
 
+/**
+ * Ordenes programadas en una linea que su tipo de rollo no permite.
+ *
+ * A diferencia del rango de piso, esto no es preferencia: es lo que la linea
+ * puede o no puede correr. Aun asi se avisa en vez de moverlo solo, porque
+ * puede ser que el marcador de la descripcion este mal escrito y no que el
+ * rollo este mal puesto.
+ */
+function avisoRestriccion(programa, restricciones) {
+  if (!restricciones?.length) return null;
+  const malas = programa.ordenes.filter((o) => !lineaPermitida(restricciones, o.linea, o));
+  if (!malas.length) return null;
+
+  const porRegla = new Map();
+  for (const o of malas) {
+    for (const r of restriccionesDe(restricciones, o)) {
+      if (!porRegla.has(r.clave)) {
+        porRegla.set(r.clave, { etiqueta: r.etiqueta, modo: r.modo, lineas: r.lineas, ordenes: 0, kilogramos: 0, donde: new Set() });
+      }
+      const g = porRegla.get(r.clave);
+      g.ordenes += 1;
+      g.kilogramos += o.kilogramos;
+      g.donde.add(o.linea);
+    }
+  }
+
+  return {
+    tipo: 'restriccion_rota',
+    severidad: 'error',
+    ordenes: malas.length,
+    kilogramos: malas.reduce((t, o) => t + o.kilogramos, 0),
+    reglas: [...porRegla.values()].map((g) => ({ ...g, donde: [...g.donde].sort() })),
+  };
+}
+
 /** Todos los avisos aplicables, de mayor a menor severidad. */
-function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null, rangos = null) {
+function reunirAvisos(
+  programa,
+  lineas,
+  tabla,
+  evaluacion,
+  propuesta = null,
+  rangos = null,
+  restricciones = null,
+) {
   const orden = { error: 0, nota: 1 };
   return [
     avisoSinReceta(evaluacion),
     avisoDevanador(programa, lineas, tabla, evaluacion),
+    avisoRestriccion(programa, restricciones),
     avisoFueraDeRango(programa, rangos),
     propuesta ? avisoTope(propuesta) : null,
   ]
@@ -3807,6 +4023,7 @@ function hojaDeCorridas(evaluacion) {
 
 
 
+
 /** Las 14 lineas instaladas mas ITW-15, que esta por instalarse. */
 const LINEAS_INSTALADAS = Array.from({ length: 14 }, (_, i) => `ITW-${i + 1}`);
 const LINEA_POR_INSTALAR = 'ITW-15';
@@ -3918,10 +4135,14 @@ function analizar(programa, puntos, supuestos = {}) {
   const evaluacion = evaluarPrograma(programa, lineas, tabla);
   const rangos = rangosVigentes(supuestos.rangos);
   const respetar = supuestos.respetarRangos ?? SUPUESTOS.respetarRangos;
+  // Las restricciones por atributo del rollo NO se pueden apagar: no son una
+  // preferencia sino lo que la linea puede o no puede correr. El rango si,
+  // porque es una preferencia de piso.
+  const restricciones = restriccionesVigentes(supuestos.restricciones);
   const propuesta = buscarOportunidades(programa, lineas, tabla, {
-    permiteDestino: respetar
-      ? (destino, orden) => dentroDelRango(rangos, destino, orden.diametroMm)
-      : null,
+    permiteDestino: (destino, orden) =>
+      lineaPermitida(restricciones, destino, orden) &&
+      (!respetar || dentroDelRango(rangos, destino, orden.diametroMm)),
     maxMovimientos: supuestos.maxMovimientos ?? SUPUESTOS.maxMovimientos,
     objetivo: supuestos.objetivo ?? SUPUESTOS.objetivo,
     topeOrdenes: supuestos.topeOrdenes ?? SUPUESTOS.topeOrdenes,
@@ -4027,6 +4248,7 @@ function empaquetar({ folio, archivo, cargadoPor, programa, lineas, tabla, evalu
         (supuestos.respetarRangos ?? SUPUESTOS.respetarRangos)
           ? rangosVigentes(supuestos.rangos)
           : null,
+        restriccionesVigentes(supuestos.restricciones),
       ),
       sinReceta: evaluacion.sinReceta.map((o) => ({
         orden: o.id,
@@ -4937,6 +5159,7 @@ function montarAnalisis(api = {}) {
       devanador_no_indicado: pintarAvisoDevanador,
       tope_alcanzado: pintarAvisoTope,
       fuera_de_rango: pintarAvisoFueraDeRango,
+      restriccion_rota: pintarAvisoRestriccion,
     };
     $('avisos').innerHTML = desactualizado + avisos
       .map((av) => (pintores[av.tipo] ?? pintarAvisoSinReceta)(av))
@@ -4953,6 +5176,24 @@ function montarAnalisis(api = {}) {
       ${recorre > 0.05 ? `— <b>${num(recorre, 1)} h more</b>` : ''}.
       <div style="margin-top:5px;color:var(--texto-tenue)">
         ${av.lineas.map((l) => `${l.linea}: ${l.ordenes} orders, ${num(l.kilogramos)} kg`).join(' · ')}
+      </div>
+    </div>`;
+  }
+
+  function pintarAvisoRestriccion(av) {
+    return `<div class="aviso error">
+      <strong>${av.ordenes} ${av.ordenes === 1 ? 'coil is' : 'coils are'}
+      (${num(av.kilogramos)} kg) on a line that cannot run that kind of coil.</strong>
+      This is not a preference like the diameter ranges — it is what the line can and
+      cannot take. Check whether the coil is on the wrong line, or whether the marker in
+      its description is wrong.
+      <div style="margin-top:5px;color:var(--texto-tenue)">
+        ${av.reglas
+          .map(
+            (r) =>
+              `${r.etiqueta} ${r.modo === 'solo' ? 'only run on' : 'cannot run on'} ${r.lineas.join(', ')} — ${r.ordenes} ${r.ordenes === 1 ? 'coil' : 'coils'} on ${r.donde.join(', ')}`,
+          )
+          .join(' · ')}
       </div>
     </div>`;
   }
@@ -6315,10 +6556,12 @@ function montarReglas(api = {}) {
   let sucio = false;
 
   let rangos = [];
+  let restricciones = [];
 
   async function refrescar() {
     reglas = await api.datos();
     rangos = (await api.rangos?.()) ?? [];
+    restricciones = (await api.restricciones?.()) ?? [];
     pintar();
   }
 
@@ -6334,6 +6577,7 @@ function montarReglas(api = {}) {
       b.addEventListener('click', () => restablecer(b.dataset.restablecer));
     });
     pintarRangos();
+    pintarRestricciones();
     pintarPie();
   }
 
@@ -6382,6 +6626,49 @@ function montarReglas(api = {}) {
         api.alCambiar?.();
       });
     });
+  }
+
+  /**
+   * Qué tipos de rollo puede correr cada línea.
+   *
+   * No se pueden apagar como los rangos: el rango es una preferencia de piso,
+   * esto es lo que la línea puede o no puede correr. Se muestran con la frase
+   * original del programador para que se pueda cotejar contra su correo.
+   */
+  function pintarRestricciones() {
+    const caja = $('restricciones');
+    if (!caja) return;
+    if (!restricciones.length) {
+      caja.innerHTML = '';
+      return;
+    }
+    caja.innerHTML = `
+      <div class="tarjeta">
+        <h2>Which lines can run which coils <small>from the scheduler, always applied</small></h2>
+        <div class="cuerpo" style="padding:0"><div class="scroll">
+          <table>
+            <thead><tr>
+              <th>Coil type</th><th></th><th>Lines</th><th>As it was given to us</th>
+            </tr></thead>
+            <tbody>${restricciones
+              .map(
+                (r) => `<tr${r.cambiada ? ' class="cambiado"' : ''}>
+                  <td><b>${r.etiqueta}</b></td>
+                  <td class="modo">${r.modo === 'solo' ? 'only on' : 'never on'}</td>
+                  <td>${r.lineas.join(', ')}</td>
+                  <td class="fuente">${r.fuente}</td>
+                </tr>`,
+              )
+              .join('')}</tbody>
+          </table>
+        </div></div>
+        <p class="nota-tabla">
+          <b>"Only on" wins over "never on".</b> The top down coils are also small ID, so
+          the two rules together would leave them nowhere — and they already run on ITW-2
+          every day. A rule that names the few lines that <i>can</i> do something beats a
+          general "not here".
+        </p>
+      </div>`;
   }
 
   function renglonRango(r) {
@@ -6576,7 +6863,7 @@ const LLAVE = 'hiloflo.demo.v1';
  * paquete y del que lo lee, asi que cambiar cualquiera de ellos invalida lo
  * guardado sin que nadie se tenga que acordar.
  */
-const VERSION_PAQUETE = "8a3aa7f09b66";
+const VERSION_PAQUETE = "fb0ef323aa93";
 
 let paquete = null;
 let estado = cargarEstado();
@@ -6763,6 +7050,7 @@ $('ir-velocidades').addEventListener('click', () => abrirPanel('velocidades'));
 const pantallaReglas = montarReglas({
   datos: async () => reglasParaPantalla(reglas),
   rangos: async () => rangosParaPantalla(rangosAjustados),
+  restricciones: async () => restriccionesParaPantalla(),
   guardarRango: async (linea, rango) => {
     if (revisarRango(rango)) return { ok: false, json: async () => ({ error: revisarRango(rango) }) };
     rangosAjustados.set(linea, rango);

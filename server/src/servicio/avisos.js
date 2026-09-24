@@ -9,6 +9,7 @@
 
 import { Orden, Programa, WINDER_ALTERNO, WINDER_PREDETERMINADO } from '../motor/modelos.js';
 import { evaluarPrograma } from '../motor/programa.js';
+import { lineaPermitida, restriccionesDe } from '../catalogo/restricciones.js';
 import { redondear } from '../util/numeros.js';
 
 /**
@@ -154,12 +155,56 @@ export function avisoFueraDeRango(programa, rangos) {
   };
 }
 
+/**
+ * Ordenes programadas en una linea que su tipo de rollo no permite.
+ *
+ * A diferencia del rango de piso, esto no es preferencia: es lo que la linea
+ * puede o no puede correr. Aun asi se avisa en vez de moverlo solo, porque
+ * puede ser que el marcador de la descripcion este mal escrito y no que el
+ * rollo este mal puesto.
+ */
+export function avisoRestriccion(programa, restricciones) {
+  if (!restricciones?.length) return null;
+  const malas = programa.ordenes.filter((o) => !lineaPermitida(restricciones, o.linea, o));
+  if (!malas.length) return null;
+
+  const porRegla = new Map();
+  for (const o of malas) {
+    for (const r of restriccionesDe(restricciones, o)) {
+      if (!porRegla.has(r.clave)) {
+        porRegla.set(r.clave, { etiqueta: r.etiqueta, modo: r.modo, lineas: r.lineas, ordenes: 0, kilogramos: 0, donde: new Set() });
+      }
+      const g = porRegla.get(r.clave);
+      g.ordenes += 1;
+      g.kilogramos += o.kilogramos;
+      g.donde.add(o.linea);
+    }
+  }
+
+  return {
+    tipo: 'restriccion_rota',
+    severidad: 'error',
+    ordenes: malas.length,
+    kilogramos: malas.reduce((t, o) => t + o.kilogramos, 0),
+    reglas: [...porRegla.values()].map((g) => ({ ...g, donde: [...g.donde].sort() })),
+  };
+}
+
 /** Todos los avisos aplicables, de mayor a menor severidad. */
-export function reunirAvisos(programa, lineas, tabla, evaluacion, propuesta = null, rangos = null) {
+export function reunirAvisos(
+  programa,
+  lineas,
+  tabla,
+  evaluacion,
+  propuesta = null,
+  rangos = null,
+  restricciones = null,
+) {
   const orden = { error: 0, nota: 1 };
   return [
     avisoSinReceta(evaluacion),
     avisoDevanador(programa, lineas, tabla, evaluacion),
+    avisoRestriccion(programa, restricciones),
     avisoFueraDeRango(programa, rangos),
     propuesta ? avisoTope(propuesta) : null,
   ]

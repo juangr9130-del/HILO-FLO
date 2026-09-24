@@ -255,6 +255,28 @@ Cuando el tope frena una mejora, la pantalla lo dice con las líneas y cuántos
 rollos cambiaron. Si esa semana alguna aguanta más, se sube el tope y se toma
 la mejora.
 
+## 2e. Las reglas del programador — CONTRADICEN al papel en dos líneas
+
+El programador mandó por correo cinco reglas. Cuatro se cumplen al 100 % en el
+schedule del 17/09, lo que les da mucho peso. Tres son por atributo del rollo
+(ver `DOMINIO.md`) y dos son de diámetro:
+
+| regla del correo | qué se hizo |
+|---|---|
+| «Production only want wire over 19.5mm ran on HTL 13» | **ya se cumplía sola**: ninguna otra línea tiene rango arriba de 19.5 |
+| «Production does not [want] anything over 14.4mm ran HTL's 5 and 6» | **se bajó el máximo de esas dos a 14.40 mm** |
+
+**La segunda contradice el papel de piso**, que daba ITW-5 hasta 15.50 e ITW-6
+hasta 16.00. Se tomó el correo por ser posterior y más específico —da la razón,
+«do to the speed that these two lines run at»— y porque **no cuesta nada**: en
+el schedule del 17/09 ninguna orden de esas dos líneas pasa de 14.40 mm.
+
+**Pregunta:** ¿el papel de piso o el correo? Los dos valores se editan en la
+pantalla de *Rules*, así que se corrige sin tocar código.
+
+También quedó pendiente confirmar **ITW-12**, que en la foto del papel trae
+tachones: se leyó **16.50 – 18.50**.
+
 ## 3. Rango de diámetros por línea — RESUELTO
 
 La tabla de bobinas de calentamiento y la de velocidades no coinciden en qué

@@ -15,6 +15,14 @@
  * Por eso se usa para frenar A DONDE se mueve material, no para reprobar lo
  * que ya esta programado: lo que ya corre fuera de rango se avisa y se deja,
  * que sacarlo seria imponerle al programador un cambio que el no pidio.
+ *
+ * Aqui viven tambien las reglas de DIAMETRO del correo del programador, que es
+ * donde corresponde. La de "solo HTL 13 arriba de 19.5 mm" ya se cumplia sola
+ * -- ninguna otra linea llega ahi -- y la de HTL 5 y 6 bajo sus maximos, con
+ * la nota de que contradice al papel.
+ *
+ * Lo que NO vive aqui son las restricciones por atributo del rollo (small ID,
+ * top down, SLM): esas no dependen de la medida y estan en restricciones.js.
  */
 
 /** Lo que entrego piso, en mm. Cada linea: [minimo, maximo]. */
@@ -23,8 +31,13 @@ export const RANGOS = new Map([
   ['ITW-2', [5.0, 12.0]],
   ['ITW-3', [9.0, 13.5]],
   ['ITW-4', [10.0, 13.5]],
-  ['ITW-5', [12.0, 15.5]],
-  ['ITW-6', [13.0, 16.0]],
+  // El papel de piso decia 15.50 y 16.00, pero el correo del programador
+  // ("Production does not [want] anything over 14.4mm ran HTL's 5 and 6 do to
+  // the speed that these two lines run at") baja las dos a 14.40. Se toma el
+  // correo por ser posterior y mas especifico, y porque no cuesta nada: en el
+  // schedule del 17/09 ninguna orden de esas dos lineas pasa de 14.40.
+  ['ITW-5', [12.0, 14.4]],
+  ['ITW-6', [13.0, 14.4]],
   ['ITW-7', [15.0, 18.0]],
   ['ITW-8', [15.0, 18.0]],
   ['ITW-9', [13.0, 16.0]],

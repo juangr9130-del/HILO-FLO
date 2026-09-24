@@ -30,6 +30,7 @@ const FUENTES = [
   'src/catalogo/velocidades.js',
   'src/catalogo/velocidades-catalogo.js',
   'src/catalogo/rangos.js',
+  'src/catalogo/restricciones.js',
   'src/ingesta/comun.js',
   'src/ingesta/hoja.js',
   'src/ingesta/parametros.js',
